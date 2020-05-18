@@ -300,15 +300,22 @@ protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanNam
 
 缺点:使用`FactoryBean`创建的bean不再属于容器管理的bean,即所有Spring提供的注入方式不能在这个bean内使用(看`getObejctForBeanInstance()`,显而易见没有`populateBean()`方法),但后处理器还可以作用在这个bean上,所以`ApplicationListener`对它来说还是能够作用的(要注意`refresh()`时生成的是factoryBean而不是目标bean,看ApplicationContext的笔记)
 
-### 2.从缓存中获取单例bean(解决循环依赖) getSingleton()
+### 2.从缓存中获取单例bean(解决循环依赖) `getSingleton()`
 
 首先介绍用于存储bean的不同map:
 
-**singletonObjects**:用于保存BeanName和创建bean实例**(bean)**的关系,一个bean完整创建完后则会被放到此map中
+```java
+//用于保存BeanName和创建bean实例(bean)的关系,一个bean完整创建完后则会被放到此map中.该一级缓存的特点是:bean已经完完全全初始化完成,并且已经是可用的状态了
+private final Map<String, Object> singletonObjects = new ConcurrentHashMap<String, Object>(256);
 
-**singletonFactories**:用于保存BeanName和创建Bean工厂之间的关系**(ObjectFactory,获取bean实例的工厂,容器内部使用,只有一个方法`getObject()`就是用来获取bean)**,用于循环依赖出现的第一次时得到未初始化完的bean实例,之后立马删除这个工厂
+//用于保存BeanName和ObjectFactory工厂之间的关系,用于循环依赖出现的第一次时得到未初始化完的bean实例,之后立马删除这个工厂.这个三级缓存的特点是:1.获取ObjectFactory之后调用objectFactor.getObject()会应用要获取的bean的后处理器,如这个bean中的有方法属于AOP增强的目标,则AnnotaionAwareAutoProxyCreator将会应用于改本bean,将该bean用JDK动态代理包装后才返回2.此时Spring还没有对该bean进行属性注入
+private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<String, ObjectFactory<?>>(16);
 
-**earlySingletonObject**:当第二次实现循环依赖又来到此bean时,该成员变量将会返回未初始化完的bean实例给`getBean()`的调用者
+//当第二次实现循环依赖又来到此bean时,该成员变量将会返回未初始化完的bean实例给getBean()的调用者.这个二级缓存的特点是:1.存入二级缓存的Bean此时都已应用了后处理器2.此时Spring还没有对该bean进行属性注入
+private final Map<String, Object> earlySingletonObjects = new HashMap<String, Object>(16);
+```
+
+
 
 ```java
 protected Object getSingleton(String beanName, boolean allowEarlyReference) {
@@ -321,11 +328,11 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
             ObjectFactory<?> singletonFactory = this.singletonFactories.get(beanName);
              //在doCreateBean()方法中,会在createBeanInstance()反射创建实例之后,populateBean()之前将含有bean实例的ObjectFactory放进this.singletonFactories成员变量中,若在属性注入时出现循环依赖又回来到此bean,则会返回singletonFactory中未初始化完成的bean
             if (singletonFactory != null) {
-                //返回singletonFactory中未初始化完成的bean
+                //应用后处理器并返回singletonFactory中未初始化完成的bean，
                singletonObject = singletonFactory.getObject();
-                //来到这里说明是第一次出现循环依赖,为避免多次使用ObjectFactory?,将未初始化完成的实例放入this.earlySingletonObjects成员变量中
+                //此时将bean从三级缓存转移到二级缓存
                this.earlySingletonObjects.put(beanName, singletonObject);
-                //不知道为什么要移除,但这一步就是将ObjectFactory从map中移除,以后再出现循环依赖则使用earlySingletonObjects返回
+                //强制移除三级缓存，二级缓存有的bean三级缓存不可以有也没必要有，看后面就明白这两个缓存的设计思路
                this.singletonFactories.remove(beanName);
             }
          }
@@ -334,6 +341,97 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
    return (singletonObject != NULL_OBJECT ? singletonObject : null);
 }
 ```
+
+主要就是从这三级缓存中获取实例。接下来我们就分析Spring为了解决循环依赖引出的一系列巧妙的设计。
+
+#### ①、循环依赖的解决
+
+##### Ⅰ、何为循环依赖
+
+循环依赖分为以下三种：
+
+1. A的构造方法中依赖了B的实例对象，同时B的构造方法中依赖了A的实例对象
+2. A的构造方法中依赖了B的实例对象，同时B的某个field或者setter需要A的实例对象，以及反之
+3. A的某个field或者setter依赖了B的实例对象，同时B的某个field或者setter依赖了A的实例对象，以及反之
+
+第一种循环依赖是不可能解决的，这是程序的特性使然，两个`<init>`会不断的调用直到报`StackOverFlowError`错误。而Spring解决的是后面两种，因为依赖注入是Spring的特性，所以Spring就有处理这种错误的手段。
+
+##### Ⅱ、循环依赖的解决思想
+
+在`createBean()`中,在`createBeanInstance(beanName, mbd, args);`反射创建完Bean实例后,有这样的代码:
+
+```java
+//AbstractBeanFactory.java
+//检测是否需要提前曝光,检测当前bean是否是单例bean且是否允许循环依赖
+	boolean earlySingletonExposure = (mbd.isSingleton() && this.allowCircularReferences &&
+			isSingletonCurrentlyInCreation(beanName));
+	if (earlySingletonExposure) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Eagerly caching bean '" + beanName +
+					"' to allow for resolving potential circular references");
+		}
+        //⭐⭐如果需要提前曝光，在初始化完成前将ObjectFactory加三级缓存singletonFactories,用于解决循环依赖
+		addSingletonFactory(beanName, new ObjectFactory<Object>() {
+			@Override
+			public Object getObject() throws BeansException {
+				return getEarlyBeanReference(beanName, mbd, bean);
+			}
+		}));
+	}
+```
+逐行代码分析
+
+```java
+//这就是向三级缓存中加入ObjectFactory的方法	
+protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
+		Assert.notNull(singletonFactory, "Singleton factory must not be null");
+		synchronized (this.singletonObjects) {
+			if (!this.singletonObjects.containsKey(beanName)) {
+                //想三级缓存中加入ObjectFactory
+				this.singletonFactories.put(beanName, singletonFactory);
+                //强制移除二级缓存的bean,因为bean的获取顺序是一级缓存→二级缓存→三级缓存,如果二级缓存中有bean,则三级缓存的bean就没有意义了
+				this.earlySingletonObjects.remove(beanName);
+				this.registeredSingletons.add(beanName);
+			}
+		}
+	}
+```
+
+⭐然后来看看`getEarlyBeanReference()`
+
+```java
+//AbstractBeanFactory.java
+protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
+   Object exposedObject = bean;
+   if (bean != null && !mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+       //获取该Bean的后处理器
+      for (BeanPostProcessor bp : getBeanPostProcessors()) {
+          //如果该后处理器有实现SmartInstantiationAwareBeanPostProcessor接口,调用其getEarlyBeanReference()方法
+         if (bp instanceof SmartInstantiationAwareBeanPostProcessor) {
+            SmartInstantiationAwareBeanPostProcessor ibp = (SmartInstantiationAwareBeanPostProcessor) bp;
+            exposedObject = ibp.getEarlyBeanReference(exposedObject, beanName);
+            if (exposedObject == null) {
+               return null;
+            }
+         }
+      }
+   }
+   return exposedObject;
+}
+//我们来看SmartInstantiationAwareBeanPostProcessor的其中一个实现
+//AbstractAutoProxyCreator.java
+	@Override
+	public Object getEarlyBeanReference(Object bean, String beanName) throws BeansException {
+		Object cacheKey = getCacheKey(bean.getClass(), beanName);
+		if (!this.earlyProxyReferences.contains(cacheKey)) {
+			this.earlyProxyReferences.add(cacheKey);
+		}
+        //⭐包装此bean,返回一个该bean的动态代理对象
+		return wrapIfNecessary(bean, beanName, cacheKey);
+	}
+```
+
+现在就已经很清晰明了了。三级缓存存入的`ObjectFactory`的作用就是在要解决循环依赖调用`objectFactory.getObject()`时,先对该bean应用后处理器。为什么要应用后处理器？可以看到，`addSingletonFactory()`是在`createBeanInstance()`反射创建完实例,`populateBean()`之前甚至可以说`initializeBean()`之前调用的,这样就说明此时放入三级缓存中的那个bean并没有应用后处理器。例如两个需要被增强的bean ——bean1和bean2循环依赖，Spring先初始化bean1.如果不应用后处理器将bean1包装成代理直接就返回给bean2的`populateBean()`的话（在`populateBean()`就已经对依赖注入的成员真正赋值完毕了），此后在bean2真正运行的时候，由于注入的bean1不是Spring中那个代理bean1了，则对bean1的调用Spring就不会应用增强，致使产生错误。所以这就是二级缓存和三级缓存存在的必要性,就是为了区分有应用过后处理器和没有应用过后处理器的bean。
 
 ### 3.缓存中无实例的情况下获取单例——`createBean()`
 
@@ -412,8 +510,13 @@ getSingleton(String beanName,ObjectFactory singletonFactory)
 				logger.debug("Eagerly caching bean '" + beanName +
 						"' to allow for resolving potential circular references");
 			}
-            //⭐如果需要提前曝光，在初始化完成前将ObjectFactory加入工厂,用于解决循环依赖
-			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
+            //⭐⭐如果需要提前曝光，在初始化完成前将ObjectFactory加三级缓存singletonFactories,用于解决循环依赖
+			addSingletonFactory(beanName, new ObjectFactory<Object>() {
+				@Override
+				public Object getObject() throws BeansException {
+					return getEarlyBeanReference(beanName, mbd, bean);
+				}
+			}));
 		}
 
 	

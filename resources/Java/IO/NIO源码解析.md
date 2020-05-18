@@ -155,7 +155,7 @@ class EPollSelectorImpl
         //创建EPollArrayWrapper实例,该实例封装了EPOLL的JNI调用
         //创建实例过程中会顺带调用epoll_create创建一个eventpoll对象
         pollWrapper = new EPollArrayWrapper();
-        //初始化用作中断的文件描述符,不太懂什么意思
+        //初始化用作中断的文件描述符
         pollWrapper.initInterrupt(fd0, fd1);
         fdToKey = new HashMap<>();
     }
@@ -525,7 +525,7 @@ protected final void implCloseChannel() throws IOException {
     }
 ```
 
-可以看到,`channel.close()`并没有对`epoll`对象操作,而是使用了一个`cancelledKeys`成员记录下这个`SelectionKey`。其实际的对`epoll`对象的rbr更新是在`select()`中。
+可以看到,`channel.close()`并没有对`epoll`对象操作,而是使用了一个`cancelledKeys`成员记录下这个`SelectionKey`。其实际的对`epoll`对象的`rbr`更新是在`select()`中。
 
 ### 五、`selector.select()`
 

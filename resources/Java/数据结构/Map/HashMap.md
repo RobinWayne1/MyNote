@@ -39,7 +39,7 @@ transient Set<Map.Entry<K,V>> entrySet;
 //table中结点个数
 transient int size;
 
-//Iterator相关,其中对HashMap的修改操作会更改modCount.若正在用Iterator遍历HashMap的Set时修改了HashMap,迭代器将会抛出ConcurrenModificationException
+//Iterator相关,其中对HashMap的修改操作会更改modCount.若正在用Iterator遍历HashMap的Set时修改了HashMap,迭代器的next()方法将会抛出ConcurrenModificationException
 transient int modCount;
 
 /**
@@ -159,6 +159,7 @@ abstract class HashIterator {
     final Node<K,V> nextNode() {
         Node<K,V>[] t;
         Node<K,V> e = next;
+		//⭐快速失败
         if (modCount != expectedModCount)
             throw new ConcurrentModificationException();
         if (e == null)
@@ -187,8 +188,6 @@ abstract class HashIterator {
     }
 }
 ```
-
-
 
 #### 1、遍历大致流程![](E:\Typora\resources\Java\数据结构\Map\遍历.png)
 
@@ -479,3 +478,13 @@ final void treeifyBin(Node<K,V>[] tab, int hash) {
 #### 2、链化
 
 链化操作会在删除树结点和拆分时触发。由于TreeNode保留着链表结构，所以`untreefiy()`直接将TreeNode替换成Node,链化操作就完成了
+
+### 八、快速失败与安全失败
+
+#### 1、快速失败
+
+如在`HashMap`利用其`Iterator`遍历的过程中,如果有线程调用`map.put()`或`map.remove()`使得`HashMap`的结构改变(值改变不影响,上面源码分析时已经说过了),此时`Iterator.next()`方法就会抛出`ConcurrentModificationException`异常。这就是快速失败。
+
+#### 2、安全失败
+
+在java.util.concurrent下的类，都是线程安全的类，他们在迭代的过程中，如果有线程进行结构的改变，不会报异常，而是正常遍历，这就是安全失败。如1.7和1.8的`ConcurrentHashMap`在迭代时就不会检查`modCount`的值,而是正常遍历;又如`CopyOnWriteArrayList`,任何的写操作都会先将`list`做一个浅拷贝,然后对这个拷贝做修改操作,最后才将这个拷贝赋值回`volatile`修饰的array中,而其遍历操作就是对该`list`的快照。所以遍历操作和修改操作互不影响，就算结构改变也会正常遍历。而这同时也造成了其弱一致性。

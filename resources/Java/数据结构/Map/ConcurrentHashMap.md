@@ -300,6 +300,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                 advance = false;
             }
             //⭐当一条线程第一次来做迁移工作时 或 已经做完了一次迁移工作后,则会来到这里,先设置好迁移的起点和终点。已经做完一次的线程如果发现transferIndex还没有小于0，则意味着该线程还要继续做迁移工作
+            //将transferIndex的值与nextIndex值比较,如果相等则将nextBound的值赋值给transferIndex
             else if (U.compareAndSwapInt
                      (this, TRANSFERINDEX, nextIndex,
                     //这个三元判断的意思是:如果当前起点的桶数组下标大于步长(默认每个CPU处理16个桶)
@@ -389,7 +390,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                         setTabAt(nextTab, i, ln);
                         //设置高链表 属于 的 新桶数组位置
                         setTabAt(nextTab, i + n, hn);
-                        //将旧桶数组位置i的头结点设置为fwd表示该桶已转移完成
+                        //将旧桶数组位置i的头结点设置为fwd表示该桶已转移完成,⭐在此之前则都可以从旧桶中获取结点数据
                         setTabAt(tab, i, fwd);
                         //设为true表示当前位置已转移完毕,下个循环将转移下一个位置
                         advance = true;
@@ -508,7 +509,7 @@ public V get(Object key) {
                     ((ek = e.key) == k || (ek != null && k.equals(ek))))
                     return e;
                 if (eh < 0) {
-                    //⭐没看懂为什么新桶数组也会出现ForwardingNode
+                    //⭐⭐⭐⭐想想这样一种场景:当前线程在tab1扩容完的前一刻某线程进来get()，所以拿到的tab=tab1，此时tab1扩容完成.之后其他线程疯狂向tab2插入导致tab2也要扩容，此时就会出现tab3.若此时当前线程执行到这里判断发现tab2[(n - 1) & h]正好正在扩容,就要去tab3中找了.所以不是两个table同时扩容,只是Traverser获取到的tab滞后了.所以是有可能出现多个table的FowardNode的.
                     if (e instanceof ForwardingNode) {
                         tab = ((ForwardingNode<K,V>)e).nextTable;
                         continue outer;
@@ -537,11 +538,144 @@ public V get(Object key) {
 
    2. 如果该位置处的头结点刚好就是我们需要的，返回该头结点的值即可
 
-   3. 如果该位置节点的 hash 值小于 0，说明正在扩容，或者是红黑树，后面我们再介绍 find 方法
+   3. 如果该位置节点的 hash 值小于 0，说明正在扩容,此时就要去`nextTable`中寻找节点，或者是红黑树
 
    4. 如果以上 3 条都不满足，那就是链表，进行遍历比对即可
 
-## 四、ConcurrentHashMap的同步机制
+## 四、遍历
+
+ConcurrentHashMap的遍历操作，主要是通过如下迭代器实现： KeyIterator，EntryIterator，ValueIterator。
+
+![](E:\Typora\resources\Java\数据结构\Map\Traverser.png)
+
+```java
+ static class Traverser<K,V> {
+        Node<K,V>[] tab;        // current table; updated if resized
+        //下一个要访问的entry
+        Node<K,V> next;         // the next entry to use
+     	//TableStack是链表结点结构
+        //发现forwardingNode时，stack保存当前tab相关信息
+     	//spare用作存放出栈了的结点,如果下一次还发现ForwardingNode,要将当前table信息加入进TableStack的话,就可以复用spare结点而不用新建结点
+        TableStack<K,V> stack, spare; // to save/restore on ForwardingNodes
+        //下一个要访问的hash桶索引
+        int index;              // index of bin to use next
+        //当前正在访问的初始tab的hash桶索引
+        int baseIndex;          // current index of initial table
+        //初始tab的hash桶索引边界
+        int baseLimit;          // index bound for initial table
+        //初始tab的长度
+        final int baseSize;     // initial table size
+        
+               Traverser(Node<K,V>[] tab, int size, int index, int limit) {
+            this.tab = tab;
+            this.baseSize = size;
+            this.baseIndex = this.index = index;
+            this.baseLimit = limit;
+            this.next = null;
+        }
+
+        
+        /**
+         * 如果有可能，返回下一个有效节点，否则返回null。
+         */
+     	//在BaseIterator构造器中和Iterator.next()方法最后 都会调用advance()以获取下一个有效节点
+        final Node<K,V> advance() {
+            Node<K,V> e;
+            //获取Node链表的下一个元素e
+            if ((e = next) != null)
+                e = e.next;
+            for (;;) {
+                Node<K,V>[] t; int i, n;  // must use locals in checks
+                //e不为空，返回e
+                if (e != null)
+                    return next = e;
+                    
+                //e为空，说明此链表已经遍历完成，准备遍历下一个hash桶
+                if (baseIndex >= baseLimit || (t = tab) == null ||
+                    (n = t.length) <= (i = index) || i < 0)
+                    //到达边界，返回null
+                    return next = null;
+                    
+                //获取下一个hash桶对应的node链表的头节点
+                if ((e = tabAt(t, i)) != null && e.hash < 0) {
+                    //转发节点,说明此hash桶中的节点已经迁移到了nextTable
+                    if (e instanceof ForwardingNode) {
+                        tab = ((ForwardingNode<K,V>)e).nextTable;
+                        e = null;
+                        //保存当前tab的遍历状态
+                        pushState(t, i, n);
+                        continue;
+                    }
+                    //红黑树
+                    else if (e instanceof TreeBin)
+                        e = ((TreeBin<K,V>)e).first;
+                    else
+                        e = null;
+                }
+                
+                
+                if (stack != null)
+                    //此时遍历的是迁移目标nextTable,尝试回退到源table，继续遍历源table中的节点
+                    recoverState(n);
+                else if ((index = i + baseSize) >= n)
+                    //初始tab的hash桶索引+1 ，即遍历下一个hash桶
+                    index = ++baseIndex; // visit upper slots if present
+            }
+        }
+        
+        
+          /**
+         * 在遇到转发节点时保存遍历状态。
+         */
+        private void pushState(Node<K,V>[] t, int i, int n) {
+            TableStack<K,V> s = spare;  // reuse if possible
+            if (s != null)
+                spare = s.next;
+            else
+                s = new TableStack<K,V>();
+            s.tab = t;
+            s.length = n;
+            s.index = i;
+            s.next = stack;
+            stack = s;
+        }
+
+        /**
+         * 可能会弹出遍历状态。
+         * @param n length of current table
+         */
+        private void recoverState(int n) {
+            TableStack<K,V> s; int len;
+            /**
+              (s = stack) != null :stack不空，说明此时遍历的是nextTable  
+              (index += (len = s.length)) >= n: 确保了按照index,index+tab.length的顺序遍历nextTable,条件成立表示nextTable已经遍历完毕
+            */
+            
+            //nextTable中的桶遍历完毕
+            while ((s = stack) != null && (index += (len = s.length)) >= n) {
+                //弹出tab，获取tab的遍历状态，开始遍历tab中的桶
+                n = len;
+                index = s.index;
+                tab = s.tab;
+                s.tab = null;
+                TableStack<K,V> next = s.next;
+                s.next = spare; // save for reuse
+                stack = next;
+                spare = s;
+            }
+            if (s == null && (index += baseSize) >= n)
+                index = ++baseIndex;
+        }
+        
+             
+        
+        
+  }
+```
+
+思路:遍历操作的大部分代码与扩容相关。在遍历时如果发现了`ForwardingNode`,则说明该桶正在扩容,此时就要去新桶数组中获取结点,若在新桶中又发现了`ForwardingNode`,则又要去新桶数组中获取节点(在`get()`中解释过为什么会出现这种存在多个新桶数组的情况);如果没有发现`ForwardingNode`,则从`tab[0]`一致遍历到`tab[tab.length-1]`即可。
+
+## 五、ConcurrentHashMap的同步机制
 
 ### 1、读操作
 
@@ -588,4 +722,6 @@ public V get(Object key) {
 > https://www.cnblogs.com/zerotomax/p/8687425.html
 >
 > https://javadoop.com/post/hashmap
+>
+> https://www.jianshu.com/p/3e85ac8f8662
 
