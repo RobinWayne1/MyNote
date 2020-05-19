@@ -91,7 +91,7 @@ public class StaticProxyTest {
 ### Ⅰ、使用JDK动态代理步骤
 
 1. 创建被代理的接口和类；
-2. 创建`InvocationHandler`接口的实现类，在invoke方法中实现代理逻辑；
+2. 创建`InvocationHandler`接口的实现类，在`invoke`方法中实现代理逻辑；
 3. 通过Proxy的静态方法`newProxyInstance( ClassLoaderloader, Class[] interfaces, InvocationHandler h)`创建一个代理对象
 4. 使用代理对象。
 
@@ -232,7 +232,7 @@ final class WeakCache<K, P, V> {
 
     private final ReferenceQueue<K> refQueue
         = new ReferenceQueue<>();
-    //⭐缓存,它的映射结构是 ClassLoader被包装后的对象→(被代理类的接口 被包装后的对象→生成的代理类Class对象工厂)
+    //⭐缓存,它的映射结构是 ClassLoader被包装后的对象→(被代理类的接口 被包装后的对象→生成的代理类Class对象工厂/被CacheValue包装过后的Class对象)
     private final ConcurrentMap<Object, ConcurrentMap<Object, Supplier<V>>> map
         = new ConcurrentHashMap<>();
     private final ConcurrentMap<Supplier<V>, Boolean> reverseMap
@@ -295,7 +295,7 @@ public V get(K key, P parameter) {
         }
 
         if (supplier == null) {
-            //将该工厂放入二级映射中。将工厂加入进valuesMap的原因应该是考虑到并发创建代理类的情况，提前暴露出工厂使得之后的代码在 supplier.get()(sync修饰的方法)中阻塞
+            //将该工厂放入二级映射中。作用就是占个位,考虑到并发创建代理类的情况，要提前暴露出工厂使得之后的代码在 supplier.get()(sync修饰的方法)中阻塞,以表示此时已有其他线程正在创建该代理类(⭐这里的处理方式和LoadingCahce如出一辙)
             supplier = valuesMap.putIfAbsent(subKey, factory);
             if (supplier == null) {
                 // successfully installed Factory
@@ -456,7 +456,7 @@ private final class Factory implements Supplier<V> {
         // the only path to reach here is with non-null value
         assert value != null;
 
-        // wrap value with CacheValue (WeakReference)
+        //CacheValue继承了WeakReference且实现了Supplier,其中value则会被弱引用
         CacheValue<V> cacheValue = new CacheValue<>(value);
 
         // put into reverseMap
@@ -739,7 +739,7 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.UndeclaredThrowableException;
 import proxy.InstanceInterface;
 
-//注意这里,继承了Proxy类
+//⭐注意这里,继承了Proxy类
 public final class $Proxy0 extends Proxy implements InstanceInterface {
     
     private static Method m1;

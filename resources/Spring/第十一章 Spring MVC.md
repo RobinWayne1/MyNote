@@ -4,7 +4,7 @@
 
 ### 一.ContextLoaderListener
 
- ContextLoaderListener的作用是再启动web容器时,自动装配ApplicationContext的配置信息.由于它实现了ServletContextListener这个接口,==在web.xml配置这个监听器,启动容器时就会默认执行它实现的方法(即创建ServletContext对象的时候调用contextInitialized()),使用这个接口可在为客户端请求提供服务之前向ServletContext中添加任意对象==。这个对象在ServletContext启动的时候被初始化，然后在ServletContext整个运行期间都可见，且每个应用都有一个ServletContext。
+ ContextLoaderListener的作用是再启动web容器时,自动装配ApplicationContext的配置信息.由于它实现了ServletContextListener这个接口,==在web.xml配置这个监听器,启动容器时就会默认执行它实现的方法(即创建ServletContext对象的时候调用`contextInitialized()`),使用这个接口可在为客户端请求提供服务之前向ServletContext中添加任意对象==。这个对象在ServletContext启动的时候被初始化，然后在ServletContext整个运行期间都可见，且每个应用都有一个ServletContext。
 
 ServletContext启动之后会调用ServletContextListener的contextInitialized（）方法
 
@@ -68,7 +68,7 @@ initServletBean();
         
         //通过contextAttribute初始化
         
-        //重新创建WebApplicationContext
+        //重新创建WebApplicationContext,这个context就是SpringMVC子容器
         createWebApplicationContext();
         {
             //利用反射实例化ApplicationContext

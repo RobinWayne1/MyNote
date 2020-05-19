@@ -84,7 +84,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 
 <img src="E:\Typora\resources\Java\Java高并发\FutureTask.png" style="zoom:50%;" />
 
-* 基本原理：线程执行futureTask中的任务，另一个线程通过`futureTask.get()`获取任务执行的返回结果,当任务未执行完成时,`futureTask.get()`将会阻塞直到任务返回
+* 基本原理：线程执行futureTask中的任务，另一个线程通过`futureTask.get()`获取任务执行的返回结果,当任务未执行完成时,`futureTask.get()`将会阻塞直到任务返回。
 
 * 基本用法:由图可见,FutureTask继承了Runnable接口,如果要线程执行任务则只需要新建一个线程。
 
