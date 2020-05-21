@@ -379,7 +379,7 @@ protected void initLifecycleProcessor() {
 			List<Integer> keys = new ArrayList<Integer>(phases.keySet());
             //⭐使用SmartLifeCycle实现bean的getPhase()方法进行排序
 			Collections.sort(keys);
-            //⭐调用所有可用的LifeCyclebean的start()方法
+            //⭐⭐⭐⭐最终就在这里调用所有可用的LifeCyclebean的start()方法
 			for (Integer key : keys) {
                 //这里有部分底层代码忽略掉了
 				phases.get(key).start();
@@ -414,3 +414,7 @@ public interface Phased {
 #### ④、`onClose()`
 
 与`onRefersh()`相类似,`DefaultLifeCycleProcessor`在`onRefersh()`实现中调用`LifeCycleBean.start()`;而`DefaultLifeCycleProcessor`也会在`onClose()`实现中调用`LifeCycleBean.stop()`,只不过暂时没有找到调用`onClose()`的入口,所以这里不讲解
+
+#### ⑤小结
+
+总而言之,Spring将在所有Bean都加载完毕后调用实现了`SmartLifeCycle`类的bean的`strat()`,这个接口可以用来在容器刚启动完成后创建一些异步任务什么的。

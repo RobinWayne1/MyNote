@@ -177,7 +177,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
 	}
 ```
 
-### 1.FactoryBean
+### 1、FactoryBean
 
 如果某个bean的创建不只是对成员变量的注入,还要有许多其他的操作来初始化此bean,那么此时单纯的使用配置文件是无法代替Java语言的初始化操作的。基于此，我们可以使用`FactoryBean`。`FactoryBean`相当于目标bean的工厂类,由于目标bean的创建工作繁杂,所以我们将这项工作委托给工厂`FactoryBean`去进行而不是配置文件.
 
@@ -300,7 +300,7 @@ protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanNam
 
 缺点:使用`FactoryBean`创建的bean不再属于容器管理的bean,即所有Spring提供的注入方式不能在这个bean内使用(看`getObejctForBeanInstance()`,显而易见没有`populateBean()`方法),但后处理器还可以作用在这个bean上,所以`ApplicationListener`对它来说还是能够作用的(要注意`refresh()`时生成的是factoryBean而不是目标bean,看ApplicationContext的笔记)
 
-### 2.从缓存中获取单例bean(解决循环依赖) `getSingleton()`
+### 2、从缓存中获取单例bean(解决循环依赖) `getSingleton()`
 
 首先介绍用于存储bean的不同map:
 
@@ -433,7 +433,7 @@ protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, 
 
 现在就已经很清晰明了了。三级缓存存入的`ObjectFactory`的作用就是在要解决循环依赖调用`objectFactory.getObject()`时,先对该bean应用后处理器。为什么要应用后处理器？可以看到，`addSingletonFactory()`是在`createBeanInstance()`反射创建完实例,`populateBean()`之前甚至可以说`initializeBean()`之前调用的,这样就说明此时放入三级缓存中的那个bean并没有应用后处理器。例如两个需要被增强的bean ——bean1和bean2循环依赖，Spring先初始化bean1.如果不应用后处理器将bean1包装成代理直接就返回给bean2的`populateBean()`的话（在`populateBean()`就已经对依赖注入的成员真正赋值完毕了），此后在bean2真正运行的时候，由于注入的bean1不是Spring中那个代理bean1了，则对bean1的调用Spring就不会应用增强，致使产生错误。所以这就是二级缓存和三级缓存存在的必要性,就是为了区分有应用过后处理器和没有应用过后处理器的bean。
 
-### 3.缓存中无实例的情况下获取单例——`createBean()`
+### 3、缓存中无实例的情况下获取单例——`createBean()`
 
 ```java
 sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
@@ -467,6 +467,53 @@ getSingleton(String beanName,ObjectFactory singletonFactory)
 ```
 
 #### ①、==`createBean()`==
+
+```java
+protected Object createBean(String beanName, RootBeanDefinition mbd, Object[] args) throws BeanCreationException {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Creating instance of bean '" + beanName + "'");
+		}
+		RootBeanDefinition mbdToUse = mbd;
+
+		// Make sure bean class is actually resolved at this point, and
+		// clone the bean definition in case of a dynamically resolved Class
+		// which cannot be stored in the shared merged bean definition.
+		Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
+		if (resolvedClass != null && !mbd.hasBeanClass() && mbd.getBeanClassName() != null) {
+			mbdToUse = new RootBeanDefinition(mbd);
+			mbdToUse.setBeanClass(resolvedClass);
+		}
+
+		   // 准备方法覆写，这里又涉及到一个概念：MethodOverrides，它来自于 bean 定义中的 <lookup-method /> 和 <replaced-method />,后面会讲
+   
+		try {
+			mbdToUse.prepareMethodOverrides();
+		}
+		catch (BeanDefinitionValidationException ex) {
+			throw new BeanDefinitionStoreException(mbdToUse.getResourceDescription(),
+					beanName, "Validation of method overrides failed", ex);
+		}
+
+		try {
+			//⭐在这里将使用InstantiationAwareBeanPostProcessor接口的方法
+			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
+			if (bean != null) {
+				return bean;
+			}
+		}
+		catch (Throwable ex) {
+			throw new BeanCreationException(mbdToUse.getResourceDescription(), beanName,
+					"BeanPostProcessor before instantiation of bean failed", ex);
+		}
+
+		Object beanInstance = doCreateBean(beanName, mbdToUse, args);
+		if (logger.isDebugEnabled()) {
+			logger.debug("Finished creating instance of bean '" + beanName + "'");
+		}
+		return beanInstance;
+	}
+
+```
 
 ```java
 	protected Object doCreateBean(final String beanName, final RootBeanDefinition mbd, final @Nullable Object[] args)
@@ -589,15 +636,98 @@ protected BeanWrapper  createBeanInstance()
 }
 ~~~
 
-##### Ⅰ、`createBeanInstance()`里的`autowiredConstructor()`:
+##### Ⅰ、`createBean()`的`resolveBeforeInstantiation()`
+
+看看这个方法
+
+```java
+protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd) {
+   Object bean = null;
+   if (!Boolean.FALSE.equals(mbd.beforeInstantiationResolved)) {
+      // Make sure bean class is actually resolved at this point.
+      if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+         Class<?> targetType = determineTargetType(beanName, mbd);
+         if (targetType != null) {
+             //在这里调用所有的 ⭐InstantiationAwareBeanPostProcessors实现类的postProcessBeforeInstantiation()方法
+            bean = applyBeanPostProcessorsBeforeInstantiation(targetType, beanName);
+            if (bean != null) {
+                //在这里应用⭐ BeanPostProcessor的postProcessAfterInitialization()方法
+               bean = applyBeanPostProcessorsAfterInitialization(bean, beanName);
+            }
+         }
+      }
+      mbd.beforeInstantiationResolved = (bean != null);
+   }
+   return bean;
+}
+
+	protected Object applyBeanPostProcessorsBeforeInstantiation(Class<?> beanClass, String beanName) {
+		for (BeanPostProcessor bp : getBeanPostProcessors()) {
+			if (bp instanceof InstantiationAwareBeanPostProcessor) {
+				InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+				Object result = ibp.postProcessBeforeInstantiation(beanClass, beanName);
+				if (result != null) {
+					return result;
+				}
+			}
+		}
+		return null;
+	}
+
+	public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName)
+			throws BeansException {
+
+		Object result = existingBean;
+		for (BeanPostProcessor beanProcessor : getBeanPostProcessors()) {
+			result = beanProcessor.postProcessAfterInitialization(result, beanName);
+			if (result == null) {
+				return result;
+			}
+		}
+		return result;
+	}
+```
+
+这个方法涉及到一个叫`InstantiationAwareBeanPostProcessors`的接口
+
+###### ₁、InstantiationAwareBeanPostProcessor
+
+```java
+//要注意它继承了BeanPostProcessor,所以他也是一个BeanPostProcessor
+public interface InstantiationAwareBeanPostProcessor extends BeanPostProcessor {
+
+	
+   Object postProcessBeforeInstantiation(Class<?> beanClass, String beanName) throws BeansException;
+
+
+   boolean postProcessAfterInstantiation(Object bean, String beanName) throws BeansException;
+
+
+   PropertyValues postProcessPropertyValues(
+         PropertyValues pvs, PropertyDescriptor[] pds, Object bean, String beanName) throws BeansException;
+
+}
+```
+
+看名字就知道这个后处理器是在bean实例化前和实例化后应用的。并且这个接口有个Spring内置实现类：
+
+`AutowiredAnnotationBeanPostProcessor`,之后会看到这个很重要的后处理器。
+
+`InstantiationAwareBeanPostProcessor`三个方法的用法和调用的时间地点:
+
+1. 如上所示,==`postProcessBeforeInstantiation()`在创建bean实例`createBeanInstance()`之前执行,如果返回了bean实例, 则会替代原来正常的bean生成流程，并且在调用`BeanPostProcessor`的`postProcessAfterInitialization()`后返回这个bean给容器管理。==我们可以在这个方法的实现中自己利用反射创建实例,并为每个bean实例创建动态代理。不过如果实现了这个方法且不返回null，那么Spring的属性注入功能也就失效了，因为基于注解注入的`AutowiredAnnotationBeanPostProcessor`也实现了`InstantiationAwareBeanPostProcessor`,且它注入的核心方法是`postProcessPropertyValues()`,在我们自己实现了`postProcessAfterInitialization()`后不可能调用这个方法。
+
+在这里先不讲后两个方法的调用,因为它们的调用主要在`populateBean`中
+
+##### Ⅱ、`createBeanInstance()`里的`autowiredConstructor()`:
 
 带有参数的bean实例化步骤
 
-1. 首先,先判断开发人员在使用getBean(String name,Object...args)方法时有没有给定参数explicitArgs,如果有则可以直接将其当作构造器的参数,没有的话尝试从配置文件解析.
+1. 首先,先判断开发人员在使用`getBean(String name,Object...args)`方法时有没有给定参数explicitArgs,如果有则可以直接将其当作构造器的参数,没有的话尝试从配置文件解析.
 
 2. 从配置文件解析时首先查看一下缓存中有没有已经解析好了的构造器参数赋值给argsToResolved,如果有则将构造器参数转换转换为最终值(因为缓存中的值可能是原始值和最终值,例如构造器需要int类型,而缓存中是"1"时,则要进行转换).
 
-3. 而如果没有被缓存则要重新解析.首先提取配置文件的构造函数参数<constructor-args>,然后调用resolveConstructorArguments()将解析到的参数个数返回给minNrOfArgs,同时在方法内把参数名,值等信息赋值给resolvedValues,最重要的是方法还将参数所属的类加载了.
+3. 而如果没有被缓存则要重新解析.首先提取配置文件的构造函数参数<constructor-args>,然后调用`resolveConstructorArguments()`将解析到的参数个数返回给minNrOfArgs,同时在方法内把参数名,值等信息赋值给`resolvedValues`,最重要的是方法还将参数所属的类加载了.
 
 4. 接下来就是选定构造器.将所有构造器按参数个数降序排序,并进行迭代,迭代到有相同个数参数的构造器,则获取其参数名,并根据参数名,参数类型,参数值,构造器等通过createArgumentArray()方法创建参数持有者-->argsHolder,argsHolder包含有原始值和类型转换后参数值,选定的构造函数匹配权重等信息.其中,这个方法将会转换参数类型,如果转换不成功(即类型不匹配)则会抛出异常,countinue;继续迭代下一个构造器.
 
@@ -660,7 +790,7 @@ autowireConstructor()
 }
 ```
 
-##### Ⅱ、`doCreateBean()`里的`populateBean()`:
+##### Ⅲ、`doCreateBean()`里的`populateBean()`:
 
 ```java
 protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper bw) {
@@ -680,8 +810,9 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 
   
    boolean continueWithPropertyPopulation = true;
-
+	//就在这里又出现了InstantiationAwareBeanPostProcessors
    if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+       //下面的逻辑就是遍历InstantiationAwareBeanPostProcessor，如果发现有其中一个的postProcessAfterInstantiation()实现返回了false的话,那么就直接返回,⭐不进行属性注入了
       for (BeanPostProcessor bp : getBeanPostProcessors()) {
          if (bp instanceof InstantiationAwareBeanPostProcessor) {
             InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
@@ -742,10 +873,11 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
    if (hasInstAwareBpps || needsDepCheck) {
       PropertyDescriptor[] filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
       if (hasInstAwareBpps) {
-        // 使@Autowired和@Value等发挥作用的AutowiredAnnotationBeanPostProcessor就是在这里被调用的,其实现方法postProcessPropertyValues()将会通过反射使成员变量赋值
+        // ⭐使@Autowired和@Value等发挥作用的AutowiredAnnotationBeanPostProcessor就是在这里被调用的,其实现方法postProcessPropertyValues()将会通过反射使成员变量赋值
          for (BeanPostProcessor bp : getBeanPostProcessors()) {
             if (bp instanceof InstantiationAwareBeanPostProcessor) {
                InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+                //这里就是InstantiationAwareBeanPostProcessors最后一个方法调用的地方
                pvs = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
                 //注意:就算AutowiredAnnotationBeanPostProcessor发挥了作用,在此处也不会返回,也就是说基于配置文件属性注入和基于注解属性注入可以混合使用
                if (pvs == null) {
@@ -763,7 +895,12 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 }
 ```
 
-##### Ⅲ、==`doCreateBean()`里的`initializeBean()`:==
+看到这里，我们就可以说出`InstantiationAwareBeanPostProcessors`的另外两个方法的用处和调用时间了:
+
+2. `postProcessAfterInstantiation()`将会==在创建完实例,且在属性注入之前(`populateBean()`中)调用。==用于判断是否要给该bean进行属性注入，如果有其中一个实现类返回false，则会放弃属性注入。
+3. ==如果`postProcessAfterInstantiation()`都返回true,则`postProcessPropertyValues()`将会在进行完XML配置的属性注入后进行。==其一个最大的用处就是有机会对bean继续做属性注入，如`AutowiredAnnotationBeanPostProcessor`就提供了基于注解的属性注入支持.
+
+##### Ⅳ、==`doCreateBean()`里的`initializeBean()`:==
 
 来看看创建完bean后的回调函数：
 
@@ -813,7 +950,7 @@ protected Object initializeBean(final String beanName, final Object bean, RootBe
 
 ###### ₁.init-method
 
-在bean创建完成后,如果该bean在配置中制定了<init-method>的方法名或该bean实现了`InitializingBean `,则在`invokeInitMethods()`就会利用反射调用相应的方法.
+在bean创建完成后,如果该bean在配置中指定了<init-method>的方法名,Spring则在`invokeInitMethods()`就会利用反射调用相应的方法。而如果有该bean实现了`InitializingBean `,则在`invokeInitMethods()`就会直接调用`afterPropertiesSet()`方法.
 
 ```java
 //SqlSessionFactoryBean的入口就是在这个方法中
@@ -844,3 +981,484 @@ public interface BeanPostProcessor {
 ```
 
 太熟悉的一个接口了,Spring非常非常多的功能都是基于这个接口实现的,如`AnnotationAwareAspectJAutoProxyCreator`、`ApplicationListenerDectector`、`AutowiredAnnotationBeanPostProcessor`(虽然这个不在`initializeBean()`里作用)
+
+## 二、扩展用法
+
+在`getBean()`中,除了上面所说的`InstantiationAwarePostProcessor`、`BeanPostProcessor`、和`InitializeBean`之外，还有一些用法事关Spring bean的生命周期，下面来介绍一下。
+
+### 1、`DisposableBean`接口与`<destory-method>`
+
+```xml
+<bean id="exampleInitBean" class="examples.ExampleBean" destroy-method="cleanup"/>
+```
+
+```java
+public class AnotherExampleBean implements DisposableBean {
+
+    public void destroy() {
+        // do some destruction work (like releasing pooled connections)
+    }
+}
+```
+
+```java
+@Bean(destroyMethod = "cleanup")
+public Bar bar() {
+    return new Bar();
+}
+```
+
+上面就是几种销毁Bean的回调。这个方法将在容器关闭时（关闭Spring的JVM）或调用`registerShutdownHook()`时会调用。
+
+```java
+public void registerShutdownHook() {
+   if (this.shutdownHook == null) {
+      // No shutdown hook registered yet.
+      this.shutdownHook = new Thread() {
+         @Override
+         public void run() {
+            synchronized (startupShutdownMonitor) {
+               doClose();
+            }
+         }
+      };
+      Runtime.getRuntime().addShutdownHook(this.shutdownHook);
+   }
+}
+```
+
+中间牵扯着太多的调用，总之最终会调用到`DisposableBeanAdapter`的`destory()`中。
+
+```java
+//DisposableBeanAdapter.java
+public void destroy() {
+   if (!CollectionUtils.isEmpty(this.beanPostProcessors)) {
+      for (DestructionAwareBeanPostProcessor processor : this.beanPostProcessors) {
+          //⭐想说的其实是这个,在这里将会调用postProcessBeforeDestruction(),而等会要说的InitDestroyAnnotationBeanPostProcessor的@PreDestory方法实现了此接口
+         processor.postProcessBeforeDestruction(this.bean, this.beanName);
+      }
+   }
+
+   if (this.invokeDisposableBean) {
+      if (logger.isDebugEnabled()) {
+         logger.debug("Invoking destroy() on bean with name '" + this.beanName + "'");
+      }
+      try {
+         if (System.getSecurityManager() != null) {
+            AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
+               @Override
+               public Object run() throws Exception {
+                  ((DisposableBean) bean).destroy();
+                  return null;
+               }
+            }, acc);
+         }
+         else {
+             //最终就会调用bean的destory方法
+            ((DisposableBean) bean).destroy();
+         }
+      }
+      catch (Throwable ex) {
+         String msg = "Invocation of destroy method failed on bean with name '" + this.beanName + "'";
+         if (logger.isDebugEnabled()) {
+            logger.warn(msg, ex);
+         }
+         else {
+            logger.warn(msg + ": " + ex);
+         }
+      }
+   }
+
+   if (this.destroyMethod != null) {
+      invokeCustomDestroyMethod(this.destroyMethod);
+   }
+   else if (this.destroyMethodName != null) {
+      Method methodToCall = determineDestroyMethod();
+      if (methodToCall != null) {
+         invokeCustomDestroyMethod(methodToCall);
+      }
+   }
+}
+```
+
+### 2、注解`@PostConstruct`和`@PreDestory`
+
+这两个注解涉及到两个类:`InitDestroyAnnotationBeanPostProcessor`  和`CommonAnnotationBeanPostProcessor`,接下来就看看这两个类是怎么实现注解方法的调用的。
+
+先看父类`InitDestroyAnnotationBeanPostProcessor`
+
+```java
+public class InitDestroyAnnotationBeanPostProcessor
+      implements DestructionAwareBeanPostProcessor, MergedBeanDefinitionPostProcessor, PriorityOrdered, Serializable {
+
+
+   private Class<? extends Annotation> initAnnotationType;
+
+   private Class<? extends Annotation> destroyAnnotationType;
+
+   private int order = Ordered.LOWEST_PRECEDENCE;
+
+   private transient final Map<Class<?>, LifecycleMetadata> lifecycleMetadataCache =
+         new ConcurrentHashMap<Class<?>, LifecycleMetadata>(256);
+
+
+  //设置初始化注解的类型,此处将会设置@PostConstruct.这个方法将在子类的构造器中调用.
+   public void setInitAnnotationType(Class<? extends Annotation> initAnnotationType) {
+      this.initAnnotationType = initAnnotationType;
+   }
+
+   //此处将会设置@PreDestory.这个方法将在子类的构造器中调用.
+   public void setDestroyAnnotationType(Class<? extends Annotation> destroyAnnotationType) {
+      this.destroyAnnotationType = destroyAnnotationType;
+   }
+
+   public void setOrder(int order) {
+      this.order = order;
+   }
+
+   @Override
+   public int getOrder() {
+      return this.order;
+   }
+
+	//⭐这就是调用@PostConstruct方法的入口
+   @Override
+   public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+      LifecycleMetadata metadata = findLifecycleMetadata(bean.getClass());
+      try {
+         metadata.invokeInitMethods(bean, beanName);
+      }
+      catch (InvocationTargetException ex) {
+         throw new BeanCreationException(beanName, "Invocation of init method failed", ex.getTargetException());
+      }
+      catch (Throwable ex) {
+         throw new BeanCreationException(beanName, "Failed to invoke init method", ex);
+      }
+      return bean;
+   }
+
+   @Override
+   public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+      return bean;
+   }
+	//调用@PreDestory方法的入口
+    //⭐在上面已经介绍过,该方法将会在调用DisposableBean.destory()之前调用
+   @Override
+   public void postProcessBeforeDestruction(Object bean, String beanName) throws BeansException {
+      LifecycleMetadata metadata = findLifecycleMetadata(bean.getClass());
+      try {
+         metadata.invokeDestroyMethods(bean, beanName);
+      }
+      catch (InvocationTargetException ex) {
+         String msg = "Invocation of destroy method failed on bean with name '" + beanName + "'";
+         if (logger.isDebugEnabled()) {
+            logger.warn(msg, ex.getTargetException());
+         }
+         else {
+            logger.warn(msg + ": " + ex.getTargetException());
+         }
+      }
+      catch (Throwable ex) {
+         logger.error("Failed to invoke destroy method on bean with name '" + beanName + "'", ex);
+      }
+   }
+}
+```
+
+可以看到,这个`InitDestroyAnnotationBeanPostProcessor`实现了`BeanPostProcessor`接口,而`@PostConstruct`方法调用的入口正是在`postProcessBeforeInitialzation()`中。所以首先来看看`findLifecycleMetadata()`
+
+#### ①、被注解标注的方法的解析过程`findLifecycleMetadata()`
+
+```java
+//InitDestroyAnnotationBeanPostProcessor.java
+ private LifecycleMetadata findLifecycleMetadata(Class<?> clazz) {
+     //如果缓存还是空,则解析该Class中的方法,检查这些方法是否有@PreDestory和@PostConstruct注解
+      if (this.lifecycleMetadataCache == null) {
+         // Happens after deserialization, during destruction...
+         return buildLifecycleMetadata(clazz);
+      }
+      // Quick check on the concurrent map first, with minimal locking.
+      LifecycleMetadata metadata = this.lifecycleMetadataCache.get(clazz);
+      if (metadata == null) {
+         synchronized (this.lifecycleMetadataCache) {
+            metadata = this.lifecycleMetadataCache.get(clazz);
+            if (metadata == null) {
+               metadata = buildLifecycleMetadata(clazz);
+               this.lifecycleMetadataCache.put(clazz, metadata);
+            }
+            return metadata;
+         }
+      }
+      return metadata;
+   }
+private LifecycleMetadata buildLifecycleMetadata(final Class<?> clazz) {
+		final boolean debug = logger.isDebugEnabled();
+		LinkedList<LifecycleElement> initMethods = new LinkedList<LifecycleElement>();
+		LinkedList<LifecycleElement> destroyMethods = new LinkedList<LifecycleElement>();
+		Class<?> targetClass = clazz;
+
+		do {
+			final LinkedList<LifecycleElement> currInitMethods = new LinkedList<LifecycleElement>();
+			final LinkedList<LifecycleElement> currDestroyMethods = new LinkedList<LifecycleElement>();
+			//注意看这个神奇的调用
+            //doWithLocalMethods()在内部会对传入的Class中的每一个Method执行一遍doWith()方法
+			ReflectionUtils.doWithLocalMethods(targetClass, new ReflectionUtils.MethodCallback() {
+				@Override
+				public void doWith(Method method) throws IllegalArgumentException, IllegalAccessException {
+					if (initAnnotationType != null) {
+                        //如果方法有@PostContruct注解
+						if (method.getAnnotation(initAnnotationType) != null) {
+                            //⭐LifecycleElement封装了方法,并向外界提供了调用方法的接口
+							LifecycleElement element = new LifecycleElement(method);
+							currInitMethods.add(element);
+							if (debug) {
+								logger.debug("Found init method on class [" + clazz.getName() + "]: " + method);
+							}
+						}
+					}
+					if (destroyAnnotationType != null) {
+						if (method.getAnnotation(destroyAnnotationType) != null) {
+							currDestroyMethods.add(new LifecycleElement(method));
+							if (debug) {
+								logger.debug("Found destroy method on class [" + clazz.getName() + "]: " + method);
+							}
+						}
+					}
+				}
+			});
+
+			initMethods.addAll(0, currInitMethods);
+			destroyMethods.addAll(currDestroyMethods);
+			targetClass = targetClass.getSuperclass();
+		}
+		while (targetClass != null && targetClass != Object.class);
+		//将该类的声明为@PostConstruct和@PreDestory的方法全都封装进LifecycleMetadata
+		return new LifecycleMetadata(clazz, initMethods, destroyMethods);
+	}
+```
+
+```java
+//InitDestroyAnnotationBeanPostProcessor.java
+private static class LifecycleElement {
+
+   private final Method method;
+	//作为方法的标识
+   private final String identifier;
+
+   public LifecycleElement(Method method) {
+      if (method.getParameterTypes().length != 0) {
+         throw new IllegalStateException("Lifecycle method annotation requires a no-arg method: " + method);
+      }
+      this.method = method;
+      this.identifier = (Modifier.isPrivate(method.getModifiers()) ?
+            ClassUtils.getQualifiedMethodName(method) : method.getName());
+   }
+
+   public Method getMethod() {
+      return this.method;
+   }
+
+   public String getIdentifier() {
+      return this.identifier;
+   }
+	//这就是所说的调用方法
+   public void invoke(Object target) throws Throwable {
+      ReflectionUtils.makeAccessible(this.method);
+      this.method.invoke(target, (Object[]) null);
+   }
+    
+}
+
+
+	private class LifecycleMetadata {
+
+		private final Class<?> targetClass;
+
+		private final Collection<LifecycleElement> initMethods;
+
+		private final Collection<LifecycleElement> destroyMethods;
+
+		private volatile Set<LifecycleElement> checkedInitMethods;
+
+		private volatile Set<LifecycleElement> checkedDestroyMethods;
+
+		public LifecycleMetadata(Class<?> targetClass, Collection<LifecycleElement> initMethods,
+				Collection<LifecycleElement> destroyMethods) {
+
+			this.targetClass = targetClass;
+			this.initMethods = initMethods;
+			this.destroyMethods = destroyMethods;
+		}
+
+		//逐个调用@PostConstruct方法
+		public void invokeInitMethods(Object target, String beanName) throws Throwable {
+			Collection<LifecycleElement> initMethodsToIterate =
+					(this.checkedInitMethods != null ? this.checkedInitMethods : this.initMethods);
+			if (!initMethodsToIterate.isEmpty()) {
+				boolean debug = logger.isDebugEnabled();
+				for (LifecycleElement element : initMethodsToIterate) {
+					if (debug) {
+						logger.debug("Invoking init method on bean '" + beanName + "': " + element.getMethod());
+					}
+					element.invoke(target);
+				}
+			}
+		}
+		//逐个调用@PreDestory方法
+		public void invokeDestroyMethods(Object target, String beanName) throws Throwable {
+			Collection<LifecycleElement> destroyMethodsToUse =
+					(this.checkedDestroyMethods != null ? this.checkedDestroyMethods : this.destroyMethods);
+			if (!destroyMethodsToUse.isEmpty()) {
+				boolean debug = logger.isDebugEnabled();
+				for (LifecycleElement element : destroyMethodsToUse) {
+					if (debug) {
+						logger.debug("Invoking destroy method on bean '" + beanName + "': " + element.getMethod());
+					}
+					element.invoke(target);
+				}
+			}
+		}
+	}
+
+```
+
+#### ②、调用`@PostConstruct`方法——`LifecycleMetadata.invokeInitMethods()`
+
+上面已经讲了这里就不再重复了
+
+#### ③、调用方法`@PreDestory`——`LifecycleMetadata.invokeDestroyMethods()`
+
+在上面已经介绍过,`postProcessBeforeDestruction()`方法将会在调用`DisposableBean.destory()`之前调用
+
+### 3、方法注入
+
+一般来说，我们的应用中大多数的 Bean 都是 singleton 的。singleton 依赖 singleton，或者 prototype 依赖 prototype 都很好解决(因为`populateBean()`也会调用`getBean()`,所以原型依赖原型是不需要处理的)，直接设置属性依赖就可以了。
+
+但是，如果是 singleton 依赖 prototype 呢？这个时候不能用属性依赖，因为如果用属性依赖的话，我们每次其实拿到的还是第一次初始化时候的 bean。
+
+一种解决方案就是不要用属性依赖，实现`ApplicationContextAware`接口,每次获取依赖的 bean 的时候从 `ApplicationContext`中取。
+
+另一种解决方案就是这里要介绍的通过使用 Lookup-method。
+
+#### ①、lookup-method
+
+看一个例子：
+
+```java
+public abstract class CommandManager {
+
+    public Object process(Object commandState) {
+        //可以直接从createCommand()中获取一个Bean
+        Command command = createCommand();
+        //获取bean后初始化一下后执行任务
+        command.setState(commandState);
+        return command.execute();
+    }
+
+    //必须要这样声明
+    protected abstract Command createCommand();
+}
+```
+
+xml 配置 ：
+
+```xml
+<!-- a stateful bean deployed as a prototype (non-singleton) -->
+<bean id="myCommand" class="fiona.apple.AsyncCommand" scope="prototype">
+    <!-- inject dependencies here as required -->
+</bean>
+
+<!-- commandProcessor uses statefulCommandHelper -->
+<bean id="commandManager" class="fiona.apple.CommandManager">
+    <lookup-method name="createCommand" bean="myCommand"/>
+</bean>
+```
+
+可以看到上面的`createCommand()`是一个抽象方法,我们并没有实现他，而是Spring用Cglib动态代理帮我们实现了这个方法，在代理类调用的`MethodInterceptor`中将会直接调用`getBean()`放回一个目标bean,这样就能实现原型模式了。
+
+还有这种配置方式：
+
+```java
+@Component
+public abstract class CommandManager {
+
+    public Object process(Object commandState) {
+        MyCommand command = createCommand();
+        command.setState(commandState);
+        return command.execute();
+    }
+
+    @Lookup("myCommand")
+    protected abstract Command createCommand();
+}
+```
+
+> 注意，既然用了注解，要配置注解扫描：<context:component-scan base-package="com.javadoop" />
+>
+> 还有一种通过属性注入`ObjectFactory<AsyncCommand> command`的骚操作,只要调用`command.getObject()`就和使用lookup-method一样了.不过不了解,这里不多阐述
+
+#### ②、replace-method
+
+记住它的功能，就是直接替换掉 bean 中的一些方法。
+
+```java
+public class MyValueCalculator {
+
+    public String computeValue(String input) {
+        // some real code...
+    }
+
+    // some other methods...
+}
+```
+
+方法覆写，注意要实现 MethodReplacer 接口：
+
+```java
+public class ReplacementComputeValue implements org.springframework.beans.factory.support.MethodReplacer {
+
+    public Object reimplement(Object o, Method m, Object[] args) throws Throwable {
+        // get the input value, work with it, and return a computed result
+        String input = (String) args[0];
+        ...
+        return ...;
+    }
+}
+```
+
+配置也很简单：
+
+```xml
+<bean id="myValueCalculator" class="x.y.z.MyValueCalculator">
+    <!-- 定义 computeValue 这个方法要被替换掉 -->
+    <replaced-method name="computeValue" replacer="replacementComputeValue">
+        <arg-type>String</arg-type>
+    </replaced-method>
+</bean>
+
+<bean id="replacementComputeValue" class="a.b.c.ReplacementComputeValue"/>
+```
+
+> arg-type 明显不是必须的，除非存在方法重载，这样必须通过参数类型列表来判断这里要覆盖哪个方法。
+
+### 3、depends-on
+
+也可以在类头添加注解`@DependsOn()`。用于声明当前bean依赖于另外一个bean，所依赖的bean会被容器确保在当前bean实例化之前被实例化。
+
+## 三、Spring bean的生命周期
+
+<img src="E:\Typora\MyNote\resources\Spring\Spring生命周期1.png" style="zoom:75%;" />
+
+<img src="E:\Typora\MyNote\resources\Spring\Spring生命周期2.png" style="zoom:75%;" />
+
+懒得手撸图了。下面说一下注意事项：
+
+1. `InstantiationAwareBeanPostProcessorAdapter`也是`BeanPostProcessor`
+2. 实现了`BeanPostProcessor`的Bean会在注册时调用`getBean()`提前初始化
+3. 由于`@PostConstruct`入口在`postProcessBeforeInitialization()`,所以他会先行执行与`afterPropertiesSet()`
+4. 而`@PreDestory`入口在`postProcessBeforeDestruction()`,所以标注的方法会在`destory()`之前执行
+
+
+> 参考资料
+>
+> https://www.cnblogs.com/xiaoxing/p/10270285.html
