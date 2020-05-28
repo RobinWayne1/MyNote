@@ -511,7 +511,7 @@ public void clear() {
 ==说大体思路==:
 
 1. 首先不加锁循环所有的Segment，求所有`Segement.count`之和，同时计算所有Segment的modcount之和sum，如果sum与last相等，说明迭代期间没有发生其他线程修改ConcurrentHashMap的情况，返回size,如果不相等则重试
-2. 当重试次数超过预定义的值（RETRIES_BEFORE_LOCK为2）时，对所有的Segment==依次==进行加锁**(全部加锁)**，再对`Segement.count`求和。
+2. 当重试次数超过预定义的值（`RETRIES_BEFORE_LOCK`为2）时，对所有的Segment==依次==进行加锁**(全部加锁)**，再对`Segement.count`求和。
 
 ### 六、弱一致性
 
