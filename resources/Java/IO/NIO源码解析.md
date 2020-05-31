@@ -35,12 +35,7 @@ public class NIOServer
         for (; ; )
         {
             // 判断是否有事件准备好。如果没有任何通道准备好，这个方法会阻塞，直到至少有一个通道准备好。
-            /**
-             * 出现了个问题:一旦有一个SocketChannel准备好之后,以后的循环select()就不会再阻塞,
-             * 而是返回1,即这个已经读过了的SocketChannel在第二次循环中还会在当selectionKeys中出现,
-             * 以至于若客户端连接断开而服务器端继续执行read()则会报错
-             * 所以要使得不再select()这个SocketChannel只能手动断开连接(大多数情况下还是需要此连接的),即socketChannel.close()
-             */
+
             /**⭐⭐⭐⭐
              *一定要先调用此方法.这个方法的底层实现会调用内核的epoll_ctl(将要注册的sockets加入到一个称作eventpoll的等待队列中,
              * 没看错,register只是将要注册的事件放进了一个HashSet成员变量中,并没有真正注册进内核)
@@ -82,7 +77,7 @@ public class NIOServer
                     ByteBuffer buffer = ByteBuffer.allocate(1024);
 
                     int nums = clientSocket.read(buffer);
-                    //为了解决上面所说的问题,在第二次执行到这里时就把过期的SocketChannel连接断开
+                    
                     if (nums > 0)
                     {
                         System.out.println(new String(buffer.array()));
@@ -849,4 +844,8 @@ public static native void configureBlocking(FileDescriptor fd,
                                                 boolean blocking)
 ```
 
-由此得知,`configureBlocking()`设置的是`ServerSocket`的阻塞状态。若设置了`server.configureBlocking(true)`,之后调用`serverSocket.accept()`就会阻塞着等待连接,也就是不将该`eventpoll`放入该`Socket`对象的等待队列中,而是用最传统的BIO方式将进程引用放入该`Socket`对象的等待队列中。
+由此得知,`configureBlocking()`设置的是`ServerSocket`的阻塞状态。若设置了`server.configureBlocking(true)`,之后调用`serverSocket.accept()`就会阻塞着等待连接,也就是不将`Selector`的`eventpoll`放入该`Socket`对象的等待队列中,而是用最传统的BIO方式将进程引用放入该`Socket`对象的等待队列中。
+
+> 参考资料
+>
+> https://segmentfault.com/a/1190000017798684?utm_source=tag-newest
