@@ -15,8 +15,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
 		Object bean;
 
 		
-    	//下面专门介绍:从缓存中获取单例bean,只找单例,因为原型一定会重新创建bean
-    	//⭐获取的其中一种可能是获得已经创建完成的bean,另一种是正在创建的bean,如果正在创建的bean允许循环依赖则会将bean的工厂ObjectFactory放入缓存中(doCreateBean()里的addSingletonFactory()方法).在B创建依赖A时通过ObjectFactory提供的实例化方法来中断A的属性填充(即doCreateBean()方法里的populateBean()方法,方法内获取属性值也是通过getBean()方法获得的,使B中持有的A仅仅是刚刚初始化并没有填充任何属性的A,这就解决了循环依赖)
+    //从三个等级的缓存中获取单例bean,这三个缓存解决了循环依赖.后面将有专门小结解释.
     //二二二二二二二二
 		Object sharedInstance = getSingleton(beanName);
 		if (sharedInstance != null && args == null) {
@@ -218,7 +217,7 @@ public class MyCarFactoryBean implements FactoryBean<Car>{
 }
 ```
 
-当需要使用Car时,只需要调用getBean("myCarFactoryBean"),此时则会在`doGetBean()`方法中,执行**`getObejctForBeanInstance()`**以将真正需要的bean——`Car`返回
+当需要使用Car时,只需要调用`getBean("myCarFactoryBean")`,此时则会在`doGetBean()`方法中,执行**`getObejctForBeanInstance()`**以将真正需要的bean——`Car`返回
 
 ```xml
 <bean class = "com.Robin.MyCarFactoryBean" id = "car">
