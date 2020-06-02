@@ -84,7 +84,8 @@ public void refresh() throws BeansException, IllegalStateException {
             //具体模板方法
 			postProcessBeanFactory(beanFactory);
 
-			//⭐这个方法则是用于调用实现了BeanFactoryProcessor的bean的postProcessBeanFactory()方法,postProcessBeanFactory()和上一个供容器使用的方法相同,只不过这里专门供给给用户使用.实现了BeanFactoryProcessor的bean将会在这里实例化(即在此方法内调用getBean()实例化),再调用其postProcessBeanFactory()方法
+			//⭐这个方法则是用于调用实现了BeanFactoryProcessor的bean的postProcessBeanFactory()方法,postProcessBeanFactory()和上一个供容器使用的方法相同,只不过这里专门供给给用户使用.实现了BeanFactoryProcessor的bean将会在这里实例化(即在此方法内调用getBean()实例化),再调用其postProcessBeanFactory()方法   
+            //（还有一个BeanDefinitionRegistryPostProcessor要讲，这是BeanFactoryPostProcessor的子接口）
 			invokeBeanFactoryPostProcessors(beanFactory);
 
 			//注册后处理器,如AnnotaionAwareAspectJAutoProxyCretator就会在这里被注册进beanPostProcessors成员变量中,想要看这个类的前世今生或BeanDefinitionRegistry请看我的AOP框架

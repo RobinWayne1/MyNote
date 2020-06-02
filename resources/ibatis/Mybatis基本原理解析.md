@@ -1,6 +1,6 @@
 # Mybatis基本原理解析
 
-接下来我将从两个角度讲解:一个是单独的Mybatis框架运行角度,一个是与Spring整合的Mybatis运行角度。
+接下来我将从两个角度讲解:一个是单独的Mybatis框架传统运行角度,一个是基于动态代理的Mybatis框架运行角度。
 
 ## 一、单独的Mybatis工作流程
 
@@ -527,37 +527,258 @@ public class ListTypeHandler implements TypeHandler<List<String>> {
 
 ### Ⅱ、`Inteceptror`
 
+## 三、Spring整合Mybatis的工作流程
 
+首先来回顾一下，当前比较流行的Spring-Mybatis整合的最基本配置如下：
 
+```xml
+<bean id="PoolDataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+    <property name="jdbcUrl" value="${jdbc.jdbcUrl}"></property>
+    <property name="driverClass" value="${jdbc.driverClass}"></property>
+    <property name="user" value="${jdbc.user}"></property>
+    <property name="password" value="${jdbc.password}"></property>
+</bean>
+<!--配置spring和mabatis的整合 -->
 
+<bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+    <!--指定mybatis的全局配置文件 -->
+    <property name="configLocation" value="classpath:mybatis-config.xml"></property>
+    <!--配置数据源 -->
+    <property name="dataSource" ref="PoolDataSource"></property>
+    <!--配置mybatis映射文件 -->
+    <property name="mapperLocations" value="classpath:mapper/*.xml"></property>
+</bean>
+<!-- 设置扫描器，将mybatis的解口实现类添加到ioc容器中 -->
+<bean name="mapperScannerConfigurer" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+    <property name="basePackage" value="com.robin.dao"></property>
+</bean>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-由此可以看出在这里先简单介绍一下`SqlSession`和`Executor`的概念。
-
-`SqlSession`是应用程序与数据库交互的顶层对象，它有两个重要的成员变量。
-
-```java
-  private final Configuration configuration;
-  private final Executor executor;
 ```
 
-在调用
+在这种配置下，我们在`@Service`层就可以直接使用`@Autowired`将我们所需要的Mapper类导入进来使用。在明白了我们是怎么用Mapper的之后，我们再来分析这四个Bean的作用。
+
+`PoolDataSource`,在上面讲主线源码时就已经提到过,`getConnection()`方法会从数据源连接池中获取连接,这个配置就是让Mybatis使用c3p0的数据源，这个并不是重点，我真正想讲的是后面两个配置。
+
+接下来我就开始从Spring启动时 调用的后处理器接口 的先后顺序来分析。
+
+### Ⅰ、MapperScannerConfigurer
+
+这个Bean是往 Spring容器中放入Mapper Bean的重要实现。
+
+```java
+public class MapperScannerConfigurer implements BeanDefinitionRegistryPostProcessor, InitializingBean, ApplicationContextAware, BeanNameAware
+```
+
+看到这里如果读者对Spring的后处理接口熟悉的话,应该就能想象到`MapperScannerConfigurer`是怎样将它扫描的Bean加入Spring容器的了——就是通过`BeanDefinitionRegistryPostProcessor`接口。
+
+```java
+@Override
+public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+    if (this.processPropertyPlaceHolders) {
+      processPropertyPlaceHolders();
+    }
+
+    ClassPathMapperScanner scanner = new ClassPathMapperScanner(registry);
+    scanner.setAddToConfig(this.addToConfig);
+    scanner.setAnnotationClass(this.annotationClass);
+    scanner.setMarkerInterface(this.markerInterface);
+    scanner.setSqlSessionFactory(this.sqlSessionFactory);
+    scanner.setSqlSessionTemplate(this.sqlSessionTemplate);
+    scanner.setSqlSessionFactoryBeanName(this.sqlSessionFactoryBeanName);
+    scanner.setSqlSessionTemplateBeanName(this.sqlSessionTemplateBeanName);
+    scanner.setResourceLoader(this.applicationContext);
+    scanner.setBeanNameGenerator(this.nameGenerator);
+    scanner.registerFilters();
+    scanner.scan(StringUtils.tokenizeToStringArray(this.basePackage, ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS));
+  }
+```
+
+所有实现了`BeanDefinitionRegistryPostProcessor`的Bean都会在`refresh()`中的`invokeBeanFactoryPostProcessors()` 方法内实例化并调用其`postProcessBeanDefinitionRegistry()`方法。
+
+`MapperScannerConfigurer`的实现比较多比较乱,并且没有什么比较重要的逻辑,在这里我就简述一下它的`postProcessBeanDefinitionRegistry`做了什么:`ClassPathMapperScanner`会扫描配置指定的包下的接口,得到这些符合条件的Mapper接口的类名,然后以它们的 首字母小写类名为`beanId`,**以一个叫`MapperFactoryBean`的工厂Bean为实际类型,==以类型注入为自动注入的模式==**等信息封装成一个`BeanDefinition`,调用`registry.registerBeanDefinition()`将其加入`BeanDefinitionRegistry`的`DefinitionMap`中。之后在Spring对`@Service`层做属性自动注入时,就会从`DefinitionMap`中找到该`MapperFactoryBean`并调用其`getObject()`方法了（`FactoryBean`的知识）。
+
+### Ⅱ、`SqlSessionFactoryBean`
+
+接下来就进入`ApplicationContext`的非延迟化加载Bean过程了,首先会加载`SqlSessionFactoryBean`。他的类结构如下：
+
+```java
+public class SqlSessionFactoryBean implements FactoryBean<SqlSessionFactory>, InitializingBean, ApplicationListener<ApplicationEvent> 
+```
+
+他的实现方法如下:
+
+```java
+  @Override
+  public SqlSessionFactory getObject() throws Exception {
+    if (this.sqlSessionFactory == null) {
+      afterPropertiesSet();
+    }
+
+    return this.sqlSessionFactory;
+  }
+
+  @Override
+  public void afterPropertiesSet() throws Exception {
+    notNull(dataSource, "Property 'dataSource' is required");
+    notNull(sqlSessionFactoryBuilder, "Property 'sqlSessionFactoryBuilder' is required");
+    state((configuration == null && configLocation == null) || !(configuration != null && configLocation != null),
+              "Property 'configuration' and 'configLocation' can not specified with together");
+	//老套路,解析mybatis-config.xml文件并实例化一个DefaultSqlSessionFactory对象
+    this.sqlSessionFactory = buildSqlSessionFactory();
+  }
+```
+
+`SqlSessionFactoryBean`的原理非常简单,其实就是做了` SqlSessionFactory ssf = new SqlSessionFactoryBuilder().build(new FileInputStream("mybatis-config.xml"));`这一步工作,生成了一个`SqlSessionFactory`，这个`SqlSessionFactory`将会作为属性被注入进`MapperFactoryBean`。
+
+### Ⅲ、MapperFactoryBean
+
+最后非延迟化加载的Bean则是`MapperFactoryBean`，他继承了`SqlSessionDaoSupport`抽象类。
+
+```java
+//SqlSessionaoSupport.java
+ private SqlSession sqlSession;
+
+  public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {
+    if (!this.externalSqlSession) {
+      this.sqlSession = new SqlSessionTemplate(sqlSessionFactory);
+    }
+  }
+```
+
+还记得上面曾说过的`MapperScannerConfigurer`类吗,在其`scan()`方法中就将`MapperFactoryBean`的属性注入模式设置成了类型注入,所以Spring在创建这个Bean的时候就会自动 将`SqlSessionFactoryBean`生成的`SqlSessionFactory`作为参数 从而调用`setSqlSessionFactory()`进行属性注入。注意看这个`SqlSessionTemplate`,该类继承自`SqlSession`,对于一二级缓存来说是一个极其核心的类。
+
+既然是`FactoryBean`,那肯定还是要看`getObject()`方法。
+
+```java
+public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements FactoryBean<T> {
+      @Override
+  public T getObject() throws Exception {
+      //得到属性注入的SqlSessionTemplate，调用其getMapper()方法。从这里开始就有Mybatis单独工作流程的那味了
+    return getSqlSession().getMapper(this.mapperInterface);
+  }
+}
+//SqlSessionTemplate.java
+  @Override
+  public <T> T getMapper(Class<T> type) {
+    return getConfiguration().getMapper(type, this);
+  }
+//Configuration.java
+  public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+    return mapperRegistry.getMapper(type, sqlSession);
+  }
+//MapperRegistry.java
+  public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+    final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMappers.get(type);
+    if (mapperProxyFactory == null) {
+      throw new BindingException("Type " + type + " is not known to the MapperRegistry.");
+    }
+    try {
+        // 通过动态代理工厂生成示例。
+      return mapperProxyFactory.newInstance(sqlSession);
+    } catch (Exception e) {
+      throw new BindingException("Error getting mapper instance. Cause: " + e, e);
+    }
+  }
+```
+
+```java
+//MapperProxyFactory.java
+public T newInstance(SqlSession sqlSession) {
+    //在这里创建了基于MapperProxy为InvocationHandler的动态代理
+    final MapperProxy<T> mapperProxy = new MapperProxy<>(sqlSession, mapperInterface, methodCache);
+    return Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] { mapperInterface }, mapperProxy);;
+  }
+```
+
+由此得知,被注入进`@Service`层中的Mapper对象其实是一个`MapperProxy`代理对象。接下来我们就正式进入Mapper对象调用流程的探究。
+
+### Ⅳ、`MapperProxy.invoke()`
+
+```java
+//MapperProxy.java
+@Override
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+  try {
+    if (Object.class.equals(method.getDeclaringClass())) {
+      return method.invoke(this, args);
+    } else {
+      return mapperMethod.execute(sqlSession, args);
+    }
+  } catch (Throwable t) {
+    throw ExceptionUtil.unwrapThrowable(t);
+  }
+}
+//MapperMethod.java
+public Object execute(SqlSession sqlSession, Object[] args) {
+    Object result;
+    //判断mapper中的方法类型，最终调用的还是SqlSession中的方法
+    switch (command.getType()) {
+      case INSERT: {
+    	Object param = method.convertArgsToSqlCommandParam(args);
+        result = rowCountResult(sqlSession.insert(command.getName(), param));
+        break;
+      }
+      case UPDATE: {
+        Object param = method.convertArgsToSqlCommandParam(args);
+        result = rowCountResult(sqlSession.update(command.getName(), param));
+        break;
+      }
+      case DELETE: {
+        Object param = method.convertArgsToSqlCommandParam(args);
+        result = rowCountResult(sqlSession.delete(command.getName(), param));
+        break;
+      }
+      case SELECT:
+        if (method.returnsVoid() && method.hasResultHandler()) {
+          executeWithResultHandler(sqlSession, args);
+          result = null;
+        } else if (method.returnsMany()) {
+            //由于我调用的是接口的Select方法,此时就会进来这里
+          result = executeForMany(sqlSession, args);
+        } else if (method.returnsMap()) {
+          result = executeForMap(sqlSession, args);
+        } else if (method.returnsCursor()) {
+          result = executeForCursor(sqlSession, args);
+        } else {
+          Object param = method.convertArgsToSqlCommandParam(args);
+          result = sqlSession.selectOne(command.getName(), param);
+          if (method.returnsOptional() &&
+              (result == null || !method.getReturnType().equals(result.getClass()))) {
+            result = Optional.ofNullable(result);
+          }
+        }
+        break;
+      case FLUSH:
+        result = sqlSession.flushStatements();
+        break;
+      default:
+        throw new BindingException("Unknown execution method for: " + command.getName());
+    }
+	//···省略代码
+    return result;
+  }
+//MapperMethod.java
+  private <E> Object executeForMany(SqlSession sqlSession, Object[] args) {
+    List<E> result;
+    Object param = method.convertArgsToSqlCommandParam(args);
+    if (method.hasRowBounds()) {
+      RowBounds rowBounds = method.extractRowBounds(args);
+      result = sqlSession.selectList(command.getName(), param, rowBounds);
+    } else {
+        //又看到了熟悉的调用,由于SqlSessionTemplate与缓存联系较多,所以我将SqlSessionTemplate放在了缓存中介绍
+      result = sqlSession.selectList(command.getName(), param);
+    }
+    // issue #510 Collections & arrays support
+    if (!method.getReturnType().isAssignableFrom(result.getClass())) {
+      if (method.getReturnType().isArray()) {
+        return convertToArray(result);
+      } else {
+        return convertToDeclaredCollection(sqlSession.getConfiguration(), result);
+      }
+    }
+    return result;
+  }
+```
 
 
 
