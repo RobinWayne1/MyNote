@@ -41,11 +41,21 @@ public SqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType exec
       try {
           //这里就是使用真正的DefaultSqlSession调用session.selectList()了
         Object result = method.invoke(sqlSession, args);
-        if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)) {
+//---------------------------------------------------------------------------------------          
+        if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)
+      	→→→{
+            //⭐其实就是对ThreadLocalMap中的SqlSessionHolder做存在性判断,存在则代表目前的调用依然在Spring事务中,不需要提交;若不在则可以直接提交了
+             SqlSessionHolder holder = (SqlSessionHolder) TransactionSynchronizationManager.getResource(sessionFactory);
+
+    return (holder != null) && (holder.getSqlSession() == session);
+       	   }) 
+        
+        {
           //⭐如果当前调用不处于Spring事务中，则直接向数据库提交
           sqlSession.commit(true);
         }
         return result;
+//---------------------------------------------------------------------------------------
       } catch (Throwable t) {
         Throwable unwrapped = unwrapThrowable(t);
         if (SqlSessionTemplate.this.exceptionTranslator != null && unwrapped instanceof PersistenceException) {
@@ -53,7 +63,7 @@ public SqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType exec
 //···省略代码
       } finally {
         if (sqlSession != null) {
-            //⭐里面的代码逻辑将会判断，如果当前调用处于Spring事务中，则保持连接；若不处于事务中，则将连接返还给连接池
+            //⭐在该方法中同样会做ThreadLocalMap中的SqlSessionHolder的存在性判断,存在则代表目前的调用依然在Spring事务中,不需要将Connection归还给连接池(也就是关闭SqlSession);若不在Spring事务中,则归还Connection
           closeSqlSession(sqlSession, SqlSessionTemplate.this.sqlSessionFactory);
         }
       }
@@ -77,7 +87,10 @@ public static SqlSession getSqlSession(SqlSessionFactory sessionFactory, Executo
   if (session != null) {
     return session;
   }
-//···省略代码
+    //⭐若没有从ThreadLocalMap中得到SqlSession，则新建一个SqlSession
+ 	session = sessionFactory.openSession(executorType);
+	//没有干什么实事
+    registerSessionHolder(sessionFactory, executorType, exceptionTranslator, session);
   return session;
 }
 ```
@@ -111,12 +124,99 @@ private static Object doGetResource(Object actualKey) {
 
 众所周知，Spring事务是基于Aop编程的。所以他跟`MethodInterceptor`脱不了干系。
 
+```java
+public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {
 
 
+   public TransactionInterceptor() {
+   }
 
 
+   public TransactionInterceptor(PlatformTransactionManager ptm, Properties attributes) {
+      setTransactionManager(ptm);
+      setTransactionAttributes(attributes);
+   }
 
 
+   public TransactionInterceptor(PlatformTransactionManager ptm, TransactionAttributeSource tas) {
+      setTransactionManager(ptm);
+      setTransactionAttributeSource(tas);
+   }
 
 
-总结：
+   @Override
+   public Object invoke(final MethodInvocation invocation) throws Throwable {
+      // Work out the target class: may be {@code null}.
+      // The TransactionAttributeSource should be passed the target class
+      // as well as the method, which may be from an interface.
+      Class<?> targetClass = (invocation.getThis() != null ? AopUtils.getTargetClass(invocation.getThis()) : null);
+
+      //核心方法
+      return invokeWithinTransaction(invocation.getMethod(), targetClass, new InvocationCallback() {
+         @Override
+         public Object proceedWithInvocation() throws Throwable {
+            return invocation.proceed();
+         }
+      });
+   }
+
+
+}
+```
+
+这里就是方法的入口。Spring把这个`TransactionInterceptor`做成了类似`@Around`通知的效果,但他实现的是`MethodInterceptor`。
+
+```java
+protected Object invokeWithinTransaction(Method method, Class<?> targetClass, final InvocationCallback invocation)
+      throws Throwable {
+
+   final TransactionAttribute txAttr = getTransactionAttributeSource().getTransactionAttribute(method, targetClass);
+   final PlatformTransactionManager tm = determineTransactionManager(txAttr);
+   final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
+
+   if (txAttr == null || !(tm instanceof CallbackPreferringPlatformTransactionManager))
+//---------------------------------------------------------------------------------------
+     //就是在这个方法内
+      TransactionInfo txInfo = createTransactionIfNecessary(tm, txAttr, joinpointIdentification);
+      →{
+          //DatasourceTransactionManager.java
+          protected void doBegin(Object transaction, TransactionDefinition definition) {
+              //从数据源中获取新的连接
+          Connection newCon = this.dataSource.getConnection();
+              //⭐就是在这里将连接放入ThreadLocalMap中
+              TransactionSynchronizationManager.bindResource(getDataSource(), txObject.getConnectionHolder());
+              //开启事务
+              con.setAutoCommit(false);
+          }
+      }
+//---------------------------------------------------------------------------------------
+      Object retVal = null;
+      try {
+    
+          //这里就是调用ReflectiveMethodInvocation.proceed()方法,继续执行拦截器链,最终调用增强的目标方法
+         retVal = invocation.proceedWithInvocation();
+      }
+      catch (Throwable ex) {
+         // target invocation exception
+         completeTransactionAfterThrowing(txInfo, ex);
+         throw ex;
+      }
+      finally {
+         cleanupTransactionInfo(txInfo);
+      }
+    //⭐最终在这里对这个事务进行提交,并将ThreadLocalMap中的SqlSession移除
+      commitTransactionAfterReturning(txInfo);
+      return retVal;
+   }
+    //省略一部分代码
+}
+```
+
+总结：Spring事务利用`TransactionInterceptor`实现了`MethodInterceptor`,对需要做事务增强的方法进行了一个环绕通知（只是效果如此）。
+
+1. `TransactionInterceptor`在调用目标方法之前，调用`DatasourceTranscationManager.doBegin()`向连接池申请连接并将该连接(`SqlSession`)放入`ThreadLocalMap`中,并通过该连接开启事务。之后则继续执行拦截器链,直到调用目标方法
+2. 在目标方法中调用Mapper对象操作数据库时，`SqlSessionInterceptor`尝试从`ThreadLocalMap`中获取`SqlSession`以调用如`Mapper.selectList()`方法。若获取失败,则说明当前调用并不在事务中,新建一个`SqlSession`以供当前这条调用语句使用。
+3. 当通过`SqlSession`成功对数据库进行操作后,`SqlSessionInterceptor`将对`ThreadLocalMap`的`SqlSessionHolder`进行存在性判断,若存在则说明当前调用在事务中，直接返回。若不存在，直接提交,至此这个`SqlSession`对象将被GC。
+4. 此时目标方法执行完毕，重新返回到拦截器链，执行`TransactionInterceptor`剩下的方法，此时`TransactionInterceptor`将会对这个事务做一个提交,并将ThreadLocalMap中的SqlSession移除。
+
+说了这么多，`SqlSession`的生命周期就是一句话:**当Mapper的调用没有被包含在事务增强中时,`SqlSession`的生命周期也就是在 Mapper对象方法 调用开始时创建,在掉用完毕后结束。而若Mapper的调用被包含在事务增强中时，`SqlSession`的生命周期将会持续整个事务,也就是说事务中所有对Mapper的调用都会公用一个`SqlSession`对象(一条连接)。**
