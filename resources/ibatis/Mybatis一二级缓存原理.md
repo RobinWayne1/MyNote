@@ -217,6 +217,18 @@ protected Object invokeWithinTransaction(Method method, Class<?> targetClass, fi
 1. `TransactionInterceptor`在调用目标方法之前，调用`DatasourceTranscationManager.doBegin()`向连接池申请连接并将该连接(`SqlSession`)放入`ThreadLocalMap`中,并通过该连接开启事务。之后则继续执行拦截器链,直到调用目标方法
 2. 在目标方法中调用Mapper对象操作数据库时，`SqlSessionInterceptor`尝试从`ThreadLocalMap`中获取`SqlSession`以调用如`Mapper.selectList()`方法。若获取失败,则说明当前调用并不在事务中,新建一个`SqlSession`以供当前这条调用语句使用。
 3. 当通过`SqlSession`成功对数据库进行操作后,`SqlSessionInterceptor`将对`ThreadLocalMap`的`SqlSessionHolder`进行存在性判断,若存在则说明当前调用在事务中，直接返回。若不存在，直接提交,至此这个`SqlSession`对象将被GC。
-4. 此时目标方法执行完毕，重新返回到拦截器链，执行`TransactionInterceptor`剩下的方法，此时`TransactionInterceptor`将会对这个事务做一个提交,并将ThreadLocalMap中的SqlSession移除。
+4. 此时目标方法执行完毕，重新返回到拦截器链，执行`TransactionInterceptor`剩下的方法，此时`TransactionInterceptor`将会对这个事务做一个提交,并将`ThreadLocalMap`中的`SqlSession`移除,这样就能保证当前线程剩余代码都不会与事务共用`SqlSession`。
 
 说了这么多，`SqlSession`的生命周期就是一句话:**当Mapper的调用没有被包含在事务增强中时,`SqlSession`的生命周期也就是在 Mapper对象方法 调用开始时创建,在掉用完毕后结束。而若Mapper的调用被包含在事务增强中时，`SqlSession`的生命周期将会持续整个事务,也就是说事务中所有对Mapper的调用都会公用一个`SqlSession`对象(一条连接)。**
+
+## 二、一级缓存
+
+接下来就可以讲一级缓存。一级缓存是由四个`Executor`的抽象父类`BaseExecutor`负责的,在调用`sqlSession.selectList()`后,其内部就会调用`BseExecutor.query()`方法。
+
+```java
+public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+  BoundSql boundSql = ms.getBoundSql(parameter);
+  CacheKey key = createCacheKey(ms, parameter, rowBounds, boundSql);
+  return query(ms, parameter, rowBounds, resultHandler, key, boundSql);
+}
+```
