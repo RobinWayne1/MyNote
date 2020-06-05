@@ -93,7 +93,7 @@ private void parseConfiguration(XNode root) {
 
 #### ①、`MappedStatement`
 
-`MappedStatement`与`Mapper`配置文件中的一个`select/update/insert/delete`节点相对应。`MappedStatement`对象在上面所说的`mapperElement()`方法解析mapper的过程中被初始化,经过这个方法后mapper中的增删改查语句的信息都会被封装到`MappedStatement`里并存放到`Configuration`里的一个map中。
+`MappedStatement`与`Mapper`文件中的一个`select/update/insert/delete`节点相对应,**他将以`namespace+statementId`唯一标识一条SQL语句**。`MappedStatement`对象在上面所说的`mapperElement()`方法解析mapper的过程中被初始化,经过这个方法后mapper中的增删改查语句的信息都会被封装到`MappedStatement`里并存放到`Configuration`里的一个map中。
 
 ```java
 //Configuration.java

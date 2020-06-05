@@ -122,7 +122,7 @@ private static Object doGetResource(Object actualKey) {
 
 ### Ⅰ、Spring事务
 
-众所周知，Spring事务是基于Aop编程的。所以他跟`MethodInterceptor`脱不了干系。
+众所周知，Spring事务是基于AOP编程的。所以他跟`MethodInterceptor`脱不了干系。
 
 ```java
 public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {
@@ -176,7 +176,7 @@ protected Object invokeWithinTransaction(Method method, Class<?> targetClass, fi
 
    if (txAttr == null || !(tm instanceof CallbackPreferringPlatformTransactionManager))
 //---------------------------------------------------------------------------------------
-     //就是在这个方法内
+     //就是在这个方法内,👇
       TransactionInfo txInfo = createTransactionIfNecessary(tm, txAttr, joinpointIdentification);
       →{
           //DatasourceTransactionManager.java
@@ -223,12 +223,408 @@ protected Object invokeWithinTransaction(Method method, Class<?> targetClass, fi
 
 ## 二、一级缓存
 
-接下来就可以讲一级缓存。一级缓存是由四个`Executor`的抽象父类`BaseExecutor`负责的,在调用`sqlSession.selectList()`后,其内部就会调用`BseExecutor.query()`方法。
+接下来就可以讲一级缓存。一级缓存是由四个`Executor`的抽象父类`BaseExecutor`负责的,在调用`sqlSession.selectList()`后,其内部就会调用`BaseExecutor.query()`方法。
 
 ```java
+//BaseExecutor.java
 public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+    //在基本原理篇曾讲过，这个对象存放着参数映射关系，执行完动态语句的SQL以及参数值
   BoundSql boundSql = ms.getBoundSql(parameter);
+    //⭐
   CacheKey key = createCacheKey(ms, parameter, rowBounds, boundSql);
+    //进入重载方法
   return query(ms, parameter, rowBounds, resultHandler, key, boundSql);
 }
 ```
+
+在`createCacheKey()`中,将`MappedStatement`的Id、SQL的offset、SQL的limit、SQL本身以及SQL中的参数传入了CacheKey这个类，最终构成`CacheKey`。
+
+```java
+//BaseExecutor.java
+//缓存
+protected PerpetualCache localCache;
+@Override
+  public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+//···省略代码
+    List<E> list;
+    try {
+      queryStack++;
+        //根据CacheKey从缓存中得到数据。一级缓存的存储对象是PerpetualCache，其内部也就是用一个HashMap来存储数据
+      list = resultHandler == null ? (List<E>) localCache.getObject(key) : null;
+      if (list != null) {
+        handleLocallyCachedOutputParameters(ms, key, parameter, boundSql);
+      } else {
+          //向数据库进行查询
+        list = queryFromDatabase(ms, parameter, rowBounds, resultHandler, key, boundSql);
+      }
+    } finally {
+      queryStack--;
+    }
+    if (queryStack == 0) {
+        //延迟加载相关
+      for (DeferredLoad deferredLoad : deferredLoads) {
+        deferredLoad.load();
+      }
+   
+      deferredLoads.clear();
+        //这个是mybatis-config.xml可以控制的<setting>,默认LocalCacheScope为session,如果将其设置为statement,可以看到每次在数据库得到数据后都会将缓存清空,使得一级缓存失效
+      if (configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT) {
+        //⭐清空缓存，其中在调用BaseExecutor的update()或commit()时,都会调用该方法刷新缓存
+        clearLocalCache();
+      }
+    }
+    return list;
+  }
+
+  private <E> List<E> queryFromDatabase(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+    List<E> list;
+    localCache.putObject(key, EXECUTION_PLACEHOLDER);
+    try {
+        //在这里调用实现类Executor的具体方法
+      list = doQuery(ms, parameter, rowBounds, resultHandler, boundSql);
+    } finally {
+      localCache.removeObject(key);
+    }
+      //将结果放入缓存中
+    localCache.putObject(key, list);
+    if (ms.getStatementType() == StatementType.CALLABLE) {
+      localOutputParameterCache.putObject(key, parameter);
+    }
+    return list;
+  }
+```
+
+上面就是在上一篇中所讲的缺失的两个调用栈，其实并没有什么逻辑可言,主要是注意某些缓存失效的地方。
+
+在源码分析的最后，我们确认一下，如果是`insert/delete/update/commit`方法，缓存就会刷新的原因。
+
+`SqlSession`的`insert`方法和`delete`方法，都会统一走`update`的流程，代码如下所示：
+
+```java
+@Override
+public int insert(String statement, Object parameter) {
+    return update(statement, parameter);
+  }
+   @Override
+  public int delete(String statement) {
+    return update(statement, null);
+}
+  @Override
+  public void commit(boolean force) {
+    try {
+      executor.commit(isCommitOrRollbackRequired(force));
+      dirty = false;
+    } catch (Exception e) {
+      throw ExceptionFactory.wrapException("Error committing transaction.  Cause: " + e, e);
+    } finally {
+      ErrorContext.instance().reset();
+    }
+  }
+```
+
+`update`和`commit`和`rollback`方法也是委托给了`Executor`执行。`BaseExecutor`的执行方法如下所示：
+
+```java
+@Override
+public int update(MappedStatement ms, Object parameter) throws SQLException {
+    ErrorContext.instance().resource(ms.getResource()).activity("executing an update").object(ms.getId());
+    if (closed) {
+      throw new ExecutorException("Executor was closed.");
+    }
+    clearLocalCache();
+    return doUpdate(ms, parameter);
+}
+
+  @Override
+  public void commit(boolean required) throws SQLException {
+    if (closed) {
+      throw new ExecutorException("Cannot commit, transaction is already closed");
+    }
+    clearLocalCache();
+    flushStatements();
+    if (required) {
+      transaction.commit();
+    }
+  }
+  @Override
+  public void rollback(boolean required) throws SQLException {
+    if (!closed) {
+      try {
+        clearLocalCache();
+        flushStatements(true);
+      } finally {
+        if (required) {
+          transaction.rollback();
+        }
+      }
+    }
+  }
+```
+
+每次执行这三个方法前都会清空`localCache`。
+
+小结:
+
+1. 在Spring-Mybatis整合中,由于不在Spring事务中时每次调用Mapper方法都会创建一个新的`SqlSession`对象,而由于`BaseExecutor`中的`localCache`是对象持有的,所以不在Spring事务中的Mapper调用相当于每次调用都创建一个新缓存,也就是失效状态。而在Spring事务中的Mapper方法调用会公用一个`SqlSession`,所以也就能使用缓存,**也就是以事务为单位的缓存**。
+
+2. 由上面的源码解析就可得出的结论，`<setting name="localCacheValue" value="statement">`即可完全禁用一级缓存,因为每次Mapper调用返回结果时都会清空缓存
+
+3. `BaseExecutor`的`update()`和`commit()`同样会刷新缓存(无论是否在事务中),前者在用户向`SqlSession`进行CUD时调用,后者在Spring事务或`SqlSession`对`Connection`事务进行提交时调用
+
+缺陷:
+
+4. MyBatis一级缓存内部设计简单，只是一个没有容量限定的HashMap，在缓存的功能性上有所欠缺。
+
+5. MyBatis的一级缓存最大范围是`SqlSession`内部，有多个`SqlSession`或者分布式的环境下，数据库写操作会引起脏数据。
+
+## 三、二级缓存
+
+### Ⅰ、二级缓存使用配置
+
+要正确的使用二级缓存，需完成如下配置的。
+
+1. 在MyBatis的配置文件中开启二级缓存。
+
+```xml
+<setting name="cacheEnabled" value="true"/>
+```
+
+1. 在MyBatis的映射XML中配置cache或者 cache-ref 。
+
+cache标签用于声明这个namespace使用二级缓存，并且可以自定义配置。
+
+```xml
+<cache/>   
+```
+
+- `type`：cache使用的类型，默认是`PerpetualCache`，这在一级缓存中提到过。
+- `eviction`： 定义回收的策略，常见的有FIFO，LRU。
+- `flushInterval`： 配置一定时间自动刷新缓存，单位是毫秒。
+- `size`： 最多缓存对象的个数。
+- `readOnly`： 是否只读，若配置可读写，则需要对应的实体类能够序列化。
+- `blocking`： 若缓存中找不到对应的key，是否会一直blocking，直到有对应的数据进入缓存。
+
+`cache-ref`代表引用别的命名空间的Cache配置，两个命名空间的操作使用的是同一个Cache。
+
+```xml
+<cache-ref namespace="mapper.StudentMapper"/>
+```
+
+二级缓存是由`CachingExecutor`负责管理的,但实际的缓存对象的存储却是在`MappedStatement`中的,**每个属于同一个命名空间的`MappedStatement`都存放着整个命名空间公用的缓存对象**。
+
+```java
+//MappedStatement.java
+private Cache cache;
+```
+
+这就是缓存成员,在实际运行中它使用了装饰者模式,但最终的本体也还是`PerpetualCache`。
+
+以下是具体这些Cache实现类的介绍，他们的组合为Cache赋予了不同的能力。
+
+- `SynchronizedCache`：同步Cache，实现比较简单，直接使用`synchronized`修饰方法。
+- `LoggingCache`：日志功能，装饰类，用于记录缓存的命中率，如果开启了DEBUG模式，则会输出命中率日志。
+- `SerializedCache`：序列化功能，将值序列化后存到缓存中。该功能用于缓存返回一份实例的Copy，用于保证线程安全。
+- `LruCache`：采用了Lru算法的Cache实现，移除最近最少使用的Key/Value。
+- `PerpetualCache`： 作为为最基础的缓存类，底层实现比较简单，直接使用了HashMap。
+
+该成员的赋值在解析Mapper时的`MappedBuilderAssiant.addMappedStatement()`构造`MappedStatement`的过程中,在构造时会使得同一个命名空间的`MappedStatement`都持有同一个缓存引用。
+
+由此可见，**二级缓存是一个以namespace为单位的缓存，其生命周期不与`SqlSession`绑定。**
+
+### Ⅱ、二级缓存管理逻辑
+
+二级缓存是由`CachingExecutor`负责管理，他是一个装饰者，本体其实还是我们配置的那三个`Executor`,调用`sqlSession.selectList()`将会分派到`CachingExecutor.query()`中。
+
+```java
+//CachingExecutor.java
+public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+    //和BaseExecutor一样,构造CacheKey
+  BoundSql boundSql = ms.getBoundSql(parameterObject);
+  CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql);
+    //进入重载方法
+  return query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+}
+//事务缓存管理器
+ private final TransactionalCacheManager tcm = new TransactionalCacheManager();
+
+  public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql)
+      throws SQLException {
+    Cache cache = ms.getCache();
+      
+    if (cache != null) {
+        //检查是否要刷新缓存
+      flushCacheIfRequired(ms);
+    }
+      if (ms.isUseCache() && resultHandler == null) {
+          //存储过程相关
+        ensureNoOutParams(ms, boundSql);
+        @SuppressWarnings("unchecked")
+          //从二级缓存中获取与cacheKey映射的结果
+        List<E> list = (List<E>) tcm.getObject(cache, key);
+        if (list == null) {
+            //调用本体Executor的query()获取数据
+          list = delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+            //将数据放入二级缓存中
+          tcm.putObject(cache, key, list); // issue #578 and #116
+        }
+        return list;
+      }
+    }
+    return delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+  }
+
+```
+
+可以看到,`CachingExecutor`并没有亲自处理缓存,而是都交给了`TransactionalCacheManager`。
+
+### Ⅱ、`TransactionalCache`
+
+```java
+//TransactionalCacheManager.java
+private final Map<Cache, TransactionalCache> transactionalCaches = new HashMap<>();
+
+```
+
+`TransactionalCacheManager`只有一个成员变量,这个Map保存了`Cache`和用`TransactionalCache`包装后的`Cache`的映射关系,`TransactionalCacheManager`的方法都是在对`TransactionalCache`的操作。`TransactionalCache`最重要的作用就是管理写入缓存的时机,它实现的机制是:==**如果事务提交，对缓存的操作才会生效，如果事务回滚或者不提交事务，则不对缓存产生影响。**==
+
+`TransactionalCache`的成员变量如下所示。
+
+```java
+  //TransactionalCache.java 
+  //这就是缓存对象
+  private final Cache delegate;
+  //用作控制删除缓存的标志
+  private boolean clearOnCommit;
+  //⭐在未提交事务前，数据将存放在这个Map中；待调用commit()时将数据写入Cache中
+  private final Map<Object, Object> entriesToAddOnCommit;
+
+```
+
+#### ①、`TransactionalCache.putObject()`
+
+```java
+@Override
+public void putObject(Object key, Object object) {
+  entriesToAddOnCommit.put(key, object);
+}
+```
+
+可以看到,`putObject()`并没有直接往缓存中写数据,而是存在了`entriesToAddOnCommit`成员中。
+
+
+
+#### ②、`TransactionalCache.clear()`
+
+```java
+@Override
+  public void clear() {
+    clearOnCommit = true;
+      //⭐清空 将要在commit()时写缓存的数据
+    entriesToAddOnCommit.clear();
+  }  
+//CachingExecutor.java
+//只有这个方法有调用clear()
+private void flushCacheIfRequired(MappedStatement ms) {
+    Cache cache = ms.getCache();
+    //⭐ms.isFlushCacheRequired()这个判断语句,对于update(CUD)操作将会返回true,而对于R操作则会返回false.但这个是可以配置的,若在<update id="updateName" flushCache="true">时,则在判断该条update语句时将永远返回true,也即不会刷新二级缓存	
+    if (cache != null && ms.isFlushCacheRequired()) {
+      tcm.clear(cache);
+    }
+  }  
+```
+
+在调用`clear()`时,会清空需要在提交时加入缓存的列表，同时设定在调用`commit()`提交时清空缓存（请看a's'dad）。`CachingExecutor`的`update()`和`query()`都有调用`flushCacheIfRequired()`,默认`update()`时会调用`clear()`。
+
+#### ③、`TransactionalCache.getObject()`
+
+```java
+@Override
+public Object getObject(Object key) {
+  //从缓存中获取数据
+  Object object = delegate.getObject(key);
+    //用来输出缓存命中率的成员,不管
+  if (object == null) {
+    entriesMissedInCache.add(key);
+  }
+  //⭐
+  if (clearOnCommit) {
+    return null;
+  } else {
+    return object;
+  }
+}
+```
+
+`getObject()`就是从缓存中获取数据,但是在返回之前还要判断。如果在当前`SqlSession`中已经调用过`clear()`,(由于未`commit()`,此时还能在缓存中找到数据),此时缓存中的数据不予返回。简单来说,就是事务中`update()`后的`select()`不会使用二级缓存。
+
+#### ④、`TransactionalCache.clear()`
+
+```java
+  public void commit() {
+      //⭐判断是否应该刷新缓存
+    if (clearOnCommit) {
+      delegate.clear();
+    }
+      //⭐将成员entriesToAddOnCommit中的所有数据刷到缓存中
+    flushPendingEntries();
+    reset();
+  }
+```
+
+在`commit()`的时候,就会判断标志是否清空缓存,将事务执行中临时存放在`entriesToAddOnCommit`的数据刷回缓存,并将所有成员变量状态重置,以迎接该`SqlSession`的下一个事务。
+
+#### ⑤、`TransactionalCache.flushPendingEntries()`和`TransactionalCache.reset()`
+
+```java
+ private void flushPendingEntries() {
+     //如上所述,刷数据到缓存
+    for (Map.Entry<Object, Object> entry : entriesToAddOnCommit.entrySet()) {
+      delegate.putObject(entry.getKey(), entry.getValue());
+    }
+    for (Object entry : entriesMissedInCache) {
+      if (!entriesToAddOnCommit.containsKey(entry)) {
+        delegate.putObject(entry, null);
+      }
+    }
+  }
+ private void reset() {
+    clearOnCommit = false;
+    entriesToAddOnCommit.clear();
+    entriesMissedInCache.clear();
+  }
+```
+
+#### ⑥、`TransactionalCache.rollback()`和`TransactionalCache.unlockMissedEntries()`
+
+```java
+
+  public void rollback() {
+    unlockMissedEntries();
+    reset();
+  }
+  private void unlockMissedEntries() {
+    for (Object entry : entriesMissedInCache) {
+      try {
+        delegate.removeObject(entry);
+      } catch (Exception e) {
+        log.warn("Unexpected exception while notifiying a rollback to the cache adapter. "
+            + "Consider upgrading your cache adapter to the latest version. Cause: " + e);
+      }
+    }
+  }
+```
+
+若是出现回滚，直接重置所有成员。
+
+小结：
+
+1. 二级缓存的存储粒度是每个命名空间共用一个缓存对象，相比于一级缓存二级缓存的粒度更小。但二级缓存是一个全局缓存，所有`SqlSession`都可以使用;而一级缓存只能在相同`SqlSession`下使用。
+2. 二级缓存可以通过不同的装饰者实现对Cache的管理，如FIFO或者LRU，比一级缓存的可控性更强
+3. 在二级缓存中,只有事务提交后才会将事务内`select`的数据存入缓存。而一级缓存中，数据将不断地随着`select`的执行成功而写入缓存。
+4. 两者的`update()`、`commit()`、`rollback()`都默认刷新整个缓存,不过二级缓存还能够通过在Statement中使用`<flushCache>`配置以强制`update()`不刷新缓存。
+
+缺点：
+
+5. 在分布式系统下，两者的缓存都会有脏数据
+6. ⭐由于二级缓存以namespace为单位，所以最好对一个表的所有操作都放在一个Mapper中。因为如果放在两个Mapper中，业务代码调用其中一个Mapper的`update()`,那么`TransactionalCache`只会刷新该namespace的缓存,而不会刷新另一个namespace的缓存,这就导致了两者的不一致使得脏数据产生。
+7. 与上面差不多的道理，如何解决多表查询的问题？对于其他Mapper对表的修改 该多表查询语句所在的Mapper并不能感应到。在多表查询中，若设计两个表的多表查询，则可以通过`<cache-ref>`配置,使得两个命名空间使用同一个`Cache`对象。不过这样做的后果是，缓存的粒度变粗了，多个`Mapper namespace`下的所有操作都会对缓存使用造成影响。
