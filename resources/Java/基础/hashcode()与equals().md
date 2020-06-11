@@ -2,7 +2,7 @@
 
 ### 一、`hashcode()`方法的作用
 
-1. hashcode可以作为对象的标志,能够方便如`HashMap`这样的数据结构在查找时确定`key`对象所在的桶位置
+1. hashcode可以作为对象的标志，其值为对象的存储地址,能够方便如`HashMap`这样的数据结构在查找时确定`key`对象所在的桶位置
 2. 如果两个`Object`调用`equals()`返回true,则这两个`Object`调用`hashcode()`一定会返回相同的值
 3. 而若两个`Object`调用`hashcode()`返回相同的值,则虚拟机并不保证两个`Object`调用`equals()`会返回`true`,`hashcode`相同只能说明这两个对象将会被放入同一个桶中
 4. `equals()`方法要与`hashcode()`一起重写,不能只重写其中某个方法
@@ -101,3 +101,7 @@ if (e.hash == hash &&
 #### Ⅱ、重写了`equals()`而没有重写`hashcode()`
 
 此时由于`object1`与`object2`的hashcode不相同，使得放入的桶也不相同，没有出现哈希碰撞自然也就能成功插入该结点了，同样出现了两个成员变量值相同的对象。
+
+### 四、注意事项
+
+`hashcode()`不仅要和`equals()`一起重写,它们的定义也必须一致。**因为要满足Java语言规范：如果`x.equals(y)`返回true,那么`x.hashcode()`必须与`y.hashcode()`具有相同的散列值。**
