@@ -432,4 +432,173 @@ catch(SQLException)
 }
 ```
 
-这样做的目的是改变异常的类型和信息描述,使得用户能更好的分析异常并定位异常。
+这样做的目的是改变异常的类型和信息描述,使得用户能更好的分析异常并定位异常。（其中运行时异常和非运行时异常都可以被catch捕获，而Error派生就无法被捕获）
+
+## 四、反射
+
+## 五、序列化
+
+当两个Java进程要通信，或需要将一个对象存储到磁盘时，就可以使用序列化机制。序列化机制就是将对象的数据序列化写入到输出流中，并在之后将其读回就可以直接反序列化为一个对象。
+
+### Ⅰ、保存和加载序列化对象
+
+最简单的序列化对象的方法只有三步：
+
+1. 使需要序列化的对象和该对象的成员所属的类都实现`java.io.Serializable`接口
+2. 使用`objectOutPutStream.writeObject(Object)`方法将所需序列化的对象保存到输出流中。
+3. 使用`Employee e=(Employee)objectInPutStream.readObject()`方法,按照这些对象写出时的顺序将保存到流的对象反序列化回来。
+
+在幕后,是`ObjectOutPutStream`在浏览对象的所有域,并对这些域的对象进行存储。但是`ObjectOutPutStream`是怎么处理多个对象引用着同一个对象（相同对象引用）这个关系的呢？这就要讨论到它的序列化算法。
+
+`ObjectOutPutStream`的序列化算法：
+
+1. `ObjectOutPutStream`对遇到的每一个  **对象引用** 都会在输出流中关联一个序列号
+2. 对于每一个对象引用，在第一次遇到时，保存其对象的数据到输出流中（如此时的序列号是21）
+3. 如果在之前某个对象已经被保存过，在之后如果再次遇到该对象引用，`ObjectOutPutStream`就会直接往输出流中写出 序列号21，不会再次存储该对象的数据。
+
+`ObjectInPutStream`的反序列化算法：
+
+1. 对于输入流中的对象，在第一次遇到其序列号时就创建这个对象，并使用流中的数据来对其初始化，然后记录该序列号与此对象的关联。
+2. 在其后若遇到 序列号21的标志时，此时就获取 该序列号对应的已创建的对象，并使引用变量指向这个对象。
+
+**注意,静态变量不会被序列化。**
+
+### Ⅱ、修改默认的序列化机制
+
+在上面说序列化对象的步骤时曾说过，所需序列化的对象与其成员全都要实现`Serializable`接口,那么如果刚好某个成员没有实现这个接口应该怎么办?又或者某些只对本地方法有意义的文件句柄整数值,这些整数值到另外一台服务器上是没有作用的,在反序列化时仍按照原机器的赋值还有可能会出错。所以这些对象是无法被序列化的。
+
+Java提供了两个机制用来解决这个问题。
+
+#### 1、`readObject()`和`writeObject()`方法
+
+如果要修改域的序列化机制,就要在所需序列化的对象中写出这两个方法。在序列化过程中会调用`writeObject()`方法,而在反序列过程中会调用`readObject()`方法。
+
+例如对于`Graph`类,`Point`成员无法被序列化。
+
+```java
+class Point
+{
+    private int x;
+    private int y;
+
+    public Point(int x, int y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+}
+```
+
+在`Graph`类中就要写出`readObject()`和`writeObject()`以自定义其序列化机制。
+
+```java
+class Graph implements java.io.Serializable
+{
+
+    public transient  Point point=new Point(1,3);
+
+    //实现这两个方法之后，还是会自动序列化域，但是之后会调用这两个方法。
+    //如Point没有实现序列化接口，那么就可以将其标记为transient使得不自动序列化，而是在
+    //writeObject中又我们自己定义序列化逻辑
+    private void readObject(ObjectInputStream in)throws IOException,ClassNotFoundException
+    {
+        in.defaultReadObject();
+        int x=in.readInt();
+        int y=in.readInt();
+        point=new Point(x,y);
+    }
+    private void writeObject(ObjectOutputStream out)throws IOException,ClassNotFoundException
+    {
+        out.defaultWriteObject();
+        out.writeInt(point.x);
+        out.writeInt(point.y);
+
+    }
+}
+```
+
+首先需要用`transient`标识`Point`成员,这样`ObjectOutPutStream`在序列化时就会跳过该成员。然后在`readObject()`和`writeObject()`定义序列化和反序列化逻辑,并在`readObject()`方法中根据序列化的信息创建对象。
+
+要注意的是，这两个方法并不是全盘负责序列化机制的，`ObjectOutPutStream.writeObject()`仍然会自动扫描域并序列化域的对象，只不过那些特殊的无法被序列化的域被标记上了`transient`后`ObjectOutPutStream`就会跳过它，这就让我们有机会自定义这些域的序列化。
+
+#### 2、`Externalizable`接口
+
+`Externalizable`有两个接口方法要实现。
+
+```java
+public interface Externalizable extends java.io.Serializable {
+
+    void writeExternal(ObjectOutput out) throws IOException;
+
+    void readExternal(ObjectInput in) throws IOException, ClassNotFoundException;
+}
+```
+
+`writeExternal`和`readExternal`所需要写的逻辑大致相同。但是与`readObject()`和`writeObject()`最大的区别就是：`Externalizable`的两个方法需要负责整个对象包括超类所有域的序列化，在实现了`Externalizable`后自动序列化机制就已经失效了，也就是说就算在对象内定义`readObject()`和`writeObject()`也不会被调用了，因为他们属于自动序列化的一环。
+
+### Ⅲ、安全的单例模式
+
+这里先做一个结论:最安全的单例模式是枚举单例模式。为何他是最安全的？那首先就要说一下其他实现为什么都是不安全的。
+
+#### 1、其他单例为何不安全
+
+其一，其他的单例模式都使用了`private`来修饰构造器,但事实上反射机制的`cons.setAccessible(true)`是可以跳过这`private`修饰符直接实例化的,所以对于反射攻击这些单例模式没有安全性可言。
+
+其二，对于实现了`Serializable`的单例,序列化机制可以创建一个单例对象。原因是在`ObjectInputStream`内本质上还是会通过反射创建单例对象。但是不同于直接反射，序列化机制为这种情况留了一条后路，也就是`readResolve()`方法。
+
+```java
+protected Object readResolve()throws ObjectStreamException
+{
+    //只需要在这里编写返回单例的代码即可
+}
+```
+
+这样在调用`ObjectInputStream.readObject()`时就不再会使用反射创建对象,而是会返回`readResolve()`的单例。
+
+但由于还是能直接通过反射跳过`private`修饰符,所以其实还是不安全。
+
+#### 2、枚举单例的安全性
+
+单例模式一直以来要考虑的问题无非就是：多线程安全性、反射攻击安全性、序列化攻击安全性。而通过Java自身的支持，这三点`enum`都天然满足了。
+
+先来说多线程安全性。我们知道，枚举实际上会在前端编译后解语法糖，最终会将声明在`enum`内的成员编译成静态常量,而这些静态常量会在一个static块中赋值。由于static块只会在类加载的初始化阶段被调用一次，而类加载过程是由JVM保证互斥的，所以`enum`的多线程安全性已有JVM保证。
+
+而对于反射攻击的安全性，我们来直接看看`Constructor.newInstance()`源码，有这样的一个判断。
+
+```java
+//Constructor.java
+if ((clazz.getModifiers() & Modifier.ENUM) != 0)
+            throw new IllegalArgumentException("Cannot reflectively create enum objects");
+```
+
+这里就会判断如果要实例化的类是`ENUM`修饰的,则直接抛出一个异常。反射攻击安全性也是由Java类库保证了。
+
+最后对于序列化攻击安全性，`ObjectOutPutStream`对枚举做了一个特殊处理。在序列化的时候仅仅是将枚举对象的name属性输出到流中，反序列化的时候则是通过`java.lang.Enum.valueOf()`方法来根据名字查找枚举对象，此时返回的就是在`enum`的静态常量,也就是单例(这些源码在`readEnum()`中)。同时，编译器是不允许任何对这种序列化机制的定制的，因此禁用了writeObject、readObject、readObjectNoData、writeReplace和readResolve等方法。至此我们就可以得知,为了枚举的序列化安全性,Java禁止了一切自定义序列化的方式（那是因为在`Enum`类中实现了这几个方法并将其标识为final）。
+
+所以,枚举单例就是最安全也是最简单的单例写法。
+
+最后附上这个单例。
+
+```java
+public enum EnumSingleton
+{
+    INSTANCE(1);
+    private int state;
+    EnumSingleton(int state)
+    {
+        this.state=state;
+    }
+    public void whateverMethod()
+    {
+        System.out.println("I am singleton!");
+    }
+}
+```
+
+### Ⅳ、版本管理
+
+存储一个对象时，这个对象所属的类也必须被存储。`ObjectOutPutStream`和`ObjectInPutStream`通过一个类的指纹唯一标识一个类。而这个指纹又是通过对该对象所属的类、超类、接口、成员变量类型和方法签名按照规范方式排序，然后用SHA安全散列算法应用于这些数据获得的。
+
+在`ObjectInPutStream`读入一个对象的时候，会拿流中对象所属类的指纹和当前在虚拟机方法区的对应类信息的指纹作对比，若是两者的指纹不匹配，那么就说明这个类的定义和本Java进程中的目标类定义不相同，此时`ObjectInPutStream`会抛出一个异常。也就是说在两个Java进程使用序列化传输对象过程中，如果输出方Java进程在旧版本的类基础上新增了一个int域，仍是旧版本的类的接收方就无法读取序列化数据创建对象。
+
+但是在大多数时候一些新版本所添加的方法和域是不会影响旧版本类的运行的，这个时候就需要一个办法以跳过这个指纹检查。那就是`private static final long serialVersionUID`的作用。如果在类中定义了这个成员，那么序列化时就会将这个`serialVersionUID`作为指纹放到输出流中(这是个特例,其他静态变量是不会被序列化的),在`ObjectInPutStream`读入一个对象的时候就会直接比较两者的`serialVersionUID`，不在根据类信息生成指纹比较。如果两者`serialVersionUID`相同就说明指纹相同可以反序列化创建对象，此时`ObjectInPutStream`就会尽力将新版本的对象数据填充到旧版本的域中（但是旧版本→新版本的过程就有可能会出现对象某些域的值为null，这个时候就需要`readObject()`来处理这个不兼容了）。

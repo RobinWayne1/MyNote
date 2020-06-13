@@ -610,7 +610,126 @@ public class Subtitle implements Serializable
 
 ## 四、延迟加载
 
+延迟加载又叫懒加载，也叫按需加载。延迟加载的应用场景主要是在关联查询中,先查询主表的信息,当需要其他表的行数据时才根据查询过的主表字段信息对副表进行关联的单表查询。这样做的好处非常多,具体请看MySQL的分解关联查询小节。
 
+先直接看一下延迟加载的demo。
+
+```xml
+<!--Mybatis-config.xml-->
+<configuration>
+    <settings>
+        <setting name="lazyLoadingEnabled" value="true"/>
+        <setting name="aggressiveLazyLoading" value="false"/>
+        <setting name="proxyFactory" value="cglib"/>
+
+    </settings>
+    <mappers>
+        <mapper resource="mapper/SubtitleMapper.xml"/>
+        <package name="com.robin.dao.SubtitleMapper"/>
+    </mappers>
+</configuration>
+```
+
+```xml
+<!--SubtitleMapper.xml-->
+<mapper namespace="com.robin.dao.SubtitleMapper">
+    <cache></cache>
+ <resultMap id="BaseResultMap" type="com.robin.pojo.NameSubtitleVO">
+         <id column="v_name" jdbcType="VARCHAR" property="vName"/>
+        <collection fetchType="lazy" property="subtitleList" column="v_name" ofType="com.robin.pojo.Subtitle" select="selectSubtitleByVname">
+            <id column="s_id" property="sId"/>
+            <result column="v_name" property="vName"/>
+            <result column="s_zh" property="sSubtitleZh"/>
+             <result column="s_en" property="sSubtitleEn"/>
+             <result column="s_time" property="sTime"/>
+             <result column="v_type" property="vName"/>
+             <result column="image" property="image"/>
+        </collection>
+
+ </resultMap>
+    <resultMap id="LazyLoadMap" type="com.robin.pojo.Subtitle">
+        <id column="s_id" property="sId"/>
+        <result column="v_name" property="vName"/>
+        <result column="s_zh" property="sSubtitleZh"/>
+        <result column="s_en" property="sSubtitleEn"/>
+        <result column="s_time" property="sTime"/>
+        <result column="v_type" property="vName"/>
+        <result column="image" property="image"/>
+    </resultMap>
+<select id="selectVideoByType" resultMap="BaseResultMap" >
+    select * from type where v_type=#{v_type} 
+</select>
+<!--注意延迟加载的sql要重新指定resultMap,不要指定了BaseResultMap-->
+    <select id="selectSubtitleByVname" resultMap="LazyLoadMap">
+select  * from subtitle where v_name=#{v_name}
+
+    </select>
+</mapper>
+```
+
+```java
+public interface SubtitleMapper
+{
+    public List<NameSubtitleVO> selectVideoByType(@Param("v_type")String videoType);
+}
+//Test.java
+ 	@org.junit.Test
+    public void test() throws Exception
+    {
+        SqlSessionFactory ssf = new SqlSessionFactoryBuilder().build(new FileInputStream("D:\\Projects\\TransationalTest\\src\\test\\resources\\mybatis-config.xml"));
+        SqlSession sqlSession = ssf.openSession();
+        SubtitleMapper subtitleMapper=sqlSession.getMapper(SubtitleMapper.class);
+        List<NameSubtitleVO> nameSubtitleVOS = subtitleMapper.selectVideoByType("喜剧");
+        for (NameSubtitleVO n : nameSubtitleVOS)
+        {
+            System.out.println(n.getvName());
+            System.out.println("-----------延迟加载-------------");
+            System.out.println(n.getSubtitleList().get(0).getsSubtitleEn());
+        }
+
+
+
+    }
+```
+
+在这里,我将
+
+```sql
+select * from subtitle inner join(select v_name from type where v_type='传记')AS t USING(v_name);
+```
+
+这条语句分成了两部分查询,第一部分是通过`v_type`查找`v_name`,第二部分是通过第一部分找到的`v_name`从而寻找对应的`subtitle`。
+
+### Ⅰ、延迟加载原理
+
+延迟加载实际上是对第一部分`subtitleMapper.selectVideoByType("喜剧");`的返回集合做了一个CGLIB动态代理。之后一旦调用`nameSubtitleVO.getSubtitleList()`,此时调用栈就会进入到CGLIB动态代理从而自动的根据`NameSubtitleVO`对象的`vName`值使用第二部分SQL对MySQL做查询。
+
+### Ⅱ、配置解析
+
+首先来讲Mybatis的配置。
+
+#### 1、Mybatis配置
+
+##### ①、lazyLoadingEnabled
+
+默认为 `false`, 也就是不使用懒加载. 所以如果 association 和 collection 使用了 `select`, 那么 MyBatis 会一次性执行所有的查询. 如果 accociation 和 collection 中的 `fetchType` 指定为 `lazy`, 那么即使 `lazyLoadingEnabled` 为 false, MyBatis 也会使用懒加载.
+
+##### ②、aggressiveLazyLoading
+
+默认为 `true`, 也就是说当你开启了懒加载之后, 只要调用返回的对象中的 *任何一个方法*, 那么 MyBatis 就会加载该对象的所有的懒加载的属性（要注意是该对象的，比如第一部分返回了许多`vName`,但是在调用`vName`为"逍遥法外"的集合方法时,就只会对`vName`为"逍遥法外"的集合的所有的懒加载的属性进行加载,不会影响其他影片）, 即执行你配置的 `select` 语句.
+
+##### ③、lazyLoadTriggerMethods
+
+默认值为 `equals,clone,hashCode,toString`, 当你调用这几个方法时, MyBatis 会加载所有懒加载的属性.
+
+#### 2、Mapper配置
+
+由于是关联查询涉及多张表，那么就必定会有一个一对一或一对多的关系。Mybatis就是依赖这个结果集关联映射做成的延迟加载。
+
+##### ①、`<collection>`
+
+* colomn:colomn是用来指定关联查询时用作关联的那个字段。
+* select：指定的是懒加载时所需触发的SQL的Statement Id
 
 
 
@@ -621,3 +740,9 @@ public class Subtitle implements Serializable
 > Mybatis标签全部引用自
 >
 > https://blog.csdn.net/qq_39623058/article/details/88779242
+>
+> 
+>
+> https://www.cnblogs.com/yjc1605961523/p/11671803.html
+>
+> [https://yoncise.com/2016/11/05/MyBatis-%E8%AE%B0%E5%BD%95%E4%BA%8C-lazy-loading/](https://yoncise.com/2016/11/05/MyBatis-记录二-lazy-loading/)

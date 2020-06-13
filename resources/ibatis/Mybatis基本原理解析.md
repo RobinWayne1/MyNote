@@ -477,11 +477,7 @@ public void setParameter(PreparedStatement ps, int i, T parameter, JdbcType jdbc
   }
 ```
 
-
-
 至此,Mybatis工作流程就讲完了。
-
-总结：
 
 ## 二、用户扩展的接口
 
@@ -780,7 +776,11 @@ public Object execute(SqlSession sqlSession, Object[] args) {
   }
 ```
 
+下面对spring-整合Mybatis做一个小结：
 
+1. `MapperScannerConfigure`类实现了`BeanDefinitionRegistryPostProcessor`接口,该接口继承自`BeanFactoryPostProcessor`。`MapperScannerConfigure`实现的该接口方法将会在Spring对配置文件解析完成并已组装成`BeanDefinitionMap`后调用,而实现方法内主要是使用`BeanDefinitionRegistry.registerBeanDefinition()`将扫描到的Mapper接口以`MapperFactoryBean`的形式写入到`BeanDefinitionMap`中。之后Spring就会加载这些`MapperFactoryBean`。
+2. 然后就来到了`refersh()`的非延迟化加载阶段,首先加载的是`SqlSessionFactoryBean`,这个方法的`getObject()`将会根据配置的`mapperLocations`提供的位置对mapperXml文件进行扫描装载,返回的是一个已经`build()`好的`SqlSessionFactory`,返回时就已经对mybatis配置文件和mapper文件做好了解析。（注意`MapperScannerConfigure`和`SqlSessionFactoryBean`的分工，一个是扫描DAO接口一个是扫描DAOMaper文件）
+3. 在对Service层的bean进行自动注入时，就会启动`MapperFactoryBean`的实例化。在该Bean的实例化过程中会将`SqlSessionFactory`依赖注入进`MapperFactoryBean`中。当调用`getObject()`时就会通过`SqlSessionTemplate.getMapper()`获取一个`MapperProxy`代理对象。要注意该`SqlSessionTemplate`只是一个装饰者装饰了`SqlSessionInterceptor`,而此时`SqlSessionInterceptor`并没有真正持有着`SqlSession`。
 
 > 参考资料
 >
