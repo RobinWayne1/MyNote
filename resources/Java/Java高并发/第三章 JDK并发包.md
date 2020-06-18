@@ -74,11 +74,11 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 #### 7.CountDownLatch与CyclicBarrier区别
 
 * CountDownLatch只能使用一次，而CyclicBarrier可以重复使用
-* `CountDownLatch.countDown`是减法操作,而`CyclicBarrier.await()`是加法操作
 * **==最重要的理解性的区别是两者的*等待对象*不相同==** **(这里还是结合两个类的具体方法进行理解比较好)**
-  * **CountDownLatch等待的是其他线程执行完操作,当前线程(多个`await()`线程)才继续执行(`CountDownLatch.countDown()`)**
-  * **CyclicBarrier则是线程之间互相等待,等到所有线程都准备完毕才一起开始执行(`CyclicBarrier.await()`)**
-  * 在代码实现上两者都可以实现对方的语义,但是这违背了初衷
+  * 线程调用`CountDownLatch.await()`用以等待其他线程完成工作,而其它线程调用`CountDownLatch.countDown()`来告诉`CountDownLatch`当前线程已完成工作。等待的线程等到所有其他线程都已完成工作后被唤醒，也就是说最后将会由调用`countdown()`的线程来负责唤醒在阻塞队列中`await()`的线程
+  * 线程调用`CyclicBarrier.await()`用以等待其他线程加入CyclicBarrier,当最后一个线程调用`await()`时,该条线程就会唤醒阻塞的所有线程。
+  * 相比于CountDownLatch，CyclicBarrier功能更多。
+* CyclieBarrier是用重入锁和Condition实现的，而ContDownLatch是基于AQS的共享模式实现的
 
 #### 8.FutureTask
 
@@ -372,7 +372,7 @@ ThreadPoolExecutor是一个可以扩展的线程池,它提供了beforeExecute(),
 
  很多应用场景中,读操作远远大于写操作。由于读操作根本不会修改原有的数据，因此对于每次读取都进行加锁其实是一种资源浪费，所以我们应该允许多个线程同时访问List的内部数据。所以CopyOnWriteArrayList只有写入和写入之间需要同步等待。
 
-* **CopyOnWriteArrayList的实现思想：==当这个array需要修改时，并不修改原有的内容，而是对原有的数据进行一次拷贝(利用`Arrays.copyOf`浅拷贝数组元素)，将修改的内容写入副本中。写完之后，再用修改完的副本替换原来的成员变量数组，这样就可以保证写操作不会影响读了。而在读取时，则直接返回(使用)成员变量数组。==**写入操作时会使用重入锁,这个锁是用于控制写-写的情况.**总之:在将数组使用方法```Arrays.copyOf()```后将新的元素加入副本数组,然后替换老数组,修改完成.**
+* **CopyOnWriteArrayList的实现思想：==当这个array需要修改时，并不修改原有的内容，而是对原有的数据进行一次拷贝(利用`Arrays.copyOf`浅拷贝数组元素)，将修改的内容写入副本中。写完之后，再用修改完的副本替换原来的成员变量数组，这样就可以保证写操作不会影响读了（注意写操作是需要获取独占锁的，而读操作则完全不用）。而在读取时，则直接返回(使用)成员变量数组。==**
 
 * **而且，这个ArrayList的底层实现数组是这样修饰的:```private volatile transient Object[] array```,所以在修改完之后,读取线程可以立即"察觉"到这个引用覆盖,实现了可见性.**
 * ⭐**有一个问题，一个线程正在进行读取操作时，另一个线程对容器进行`setArray()`--即将修改后的数组赋值给成员变量,这是否线程安全?答案是肯定的。要知道,COWAL里的`getArray()`方法会返回原数组的那块堆内存给调用者,而所有的读操作都将使用这个方法访问底层数组而不是直接使用成员变量(直接使用成员变量,例如在进行迭代操作时,迭代的两个元素就有可能不是同一个数组),这样就能保证如果`getArray()`在`setArray()`之前,`setArray()`产生的结果不会影响`getArray()`的调用者对数组的使用。**
@@ -395,7 +395,7 @@ ArrayBlockingQueue适合有界队列,LinkedBlockingQueue适合无界队列.
 
 LBQ却使用了锁分离的思想，将`put`和`take`操作分成了两把锁,在添加数据时争抢`putLock`,而在读取数据时争抢`tackLock`
 
-##### ③**PriorityQueue**
+##### ③、**PriorityQueue**
 
 默认是一个小顶堆
 
@@ -403,9 +403,7 @@ LBQ却使用了锁分离的思想，将`put`和`take`操作分成了两把锁,�
 
 LinkedBlockingQueue添加元素时有一个构造节点的时间，为了尽量减少这部分时间占比，使用一个读锁一个写锁可以实现并发存取的优化。而ArrayBlockingQueue在添加元素时不需要开辟空间等等（创建时指定数组大小），所以反而是加锁解锁时间占比较大，如果继续使用这种读写锁分离的设计，增加的时间损耗大于并发读写带来的收益。
 
-
-
-### 四.AbstractQueuedSynchronizer
+### 四.AbstractQueuedSynchronizer（记方法名与每个方法做了什么）
 
 #### Ⅰ、AQS结构
 
@@ -653,7 +651,8 @@ final boolean acquireQueued(final Node node, int arg) {
 
 ```java
 //Node的waitStatus
-/*⭐int CANCELLED = 1//节点从阻塞队列中取消。有三种情况会让节点进入此状态：1、tryAcquire()报错2、tryLock()超时3、tryLock()被中断.注意取消后节点还在阻塞队列中。
+/*⭐int CANCELLED = 1//节点从阻塞队列中取消。有三种情况会让节点进入此状态：1、tryAcquire()报错 
+后面这三种其实并不在aquireQueued()方法中2、tryLock()超时3、tryLock()或lockInterruptibly()被中断.注意取消后节点还在阻塞队列中。
 * int SIGNAL = -1//后继节点的线程处于等待状态，如果当前节点释放同步状态会通知后继节点，使得后继节点的线* 程能够运行；
 * int CONDITION = -2//当前节点在条件队列(非阻塞队列)中。
 * int PROPAGATE = -3//表示下一次共享时同步状态获取将会无条件传播下去
@@ -677,7 +676,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node)
         pred.next = node;
     } else {
       //如果前驱节点的waiteStatus=0或propagate,则将其CAS为signal,并返回false
-        //⭐这条分支会在共享模式下起作用
+       //在独占模式下作用是将还在初始化状态的前驱设置为SIGNAL
         compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
     }
     //上述两种返回false而不直接修改完返回true的原因,个人猜测是运用自旋锁的思想,让线程空转一会等待,不直接挂起
@@ -685,7 +684,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node)
 }
 ```
 
-aquire总结：先从AQS实现类(ReentrantLock)调用面向用户的接口(`lock.lock()`)(ReentrantLock在进入AQS前会先进行一次获取锁操作→记录独占线程和重入次数，如果成功则直接获得锁),然后调用`aquire()`进入到AQS里,然后再调用实现类的`tryAquire()`方法。要注意，`tryAcquire()`只会进行一次。在上述==两次(`lock.lock()`有一次)==尝试对state进行修改失败后，就会来到接下来进入双端带头阻塞队列的操作中----` acquireQueued(addWaiter(Node.EXCLUSIVE), arg)`。` addWaiter(Node.EXCLUSIVE)`负责对阻塞队列的初始化以及将当前线程包装为Node加入阻塞队列队尾。==然后来到`acquireQueued()`方法,由于阻塞队列头节点为空节点,所以当`node.prev=head`为true时,则证明目前可能有一个线程在占用锁(也可能没有线程在占用)并且下一个得到锁的 且在阻塞队列（非公平锁情况的条件） 的线程将会是当前线程,所以此时当前线程将尝试调用`tryAquire()`修改状态获取lock，如果获取成功，则将线程所在的当前节点变为头节点(空节点)==~~(关于阻塞队列操作的线程安全性,入队的操作有`enq()`中无限循环`compareAndSetTail(t, node)`保证,出队即`setHead()`则有`tryAcquire()`保证，且head和tail、waitStatus等等关于队列与node的状态都使用了volatile修饰，保证了CAS操作可见性和有序性)~~。如果获取失败，则根据前驱节点的waitStatus选择自旋或阻塞。
+aquire总结：先从AQS实现类(ReentrantLock)调用面向用户的接口(`lock.lock()`)(ReentrantLock在进入AQS前会先进行一次获取锁操作→记录独占线程和重入次数，如果成功则直接获得锁),然后调用`aquire()`进入到AQS里,然后再调用实现类的`tryAquire()`方法。要注意，`tryAcquire()`只会进行一次。在上述==两次(`lock.lock()`有一次)==尝试对state进行修改失败后，就会来到接下来进入双端带头阻塞队列的操作中——` acquireQueued(addWaiter(Node.EXCLUSIVE), arg)`。` addWaiter(Node.EXCLUSIVE)`负责对阻塞队列的初始化以及将当前线程包装为Node加入阻塞队列队尾。==然后来到`acquireQueued()`方法,由于阻塞队列头节点为空节点,所以当`node.prev=head`为true时,则证明目前可能有一个线程在占用锁(也可能没有线程在占用)并且下一个得到锁的 且在阻塞队列（非公平锁情况的条件） 的线程将会是当前线程,所以此时当前线程将尝试调用`tryAquire()`修改状态获取lock，如果获取成功，则将线程所在的当前节点变为头节点(空节点)==。如果获取失败，则根据前驱节点的waitStatus选择自旋或阻塞。**如果当前结点的前驱status是SIGNAL,则可以直接阻塞了,因为在前驱释放锁的时候若其status是SIGNAL则会唤醒后继的线程;但若前驱status>0,这表明前驱结点有被取消了,此时就要不断往前寻找第一个status不为0的结点从而将当前结点接到其后,这一步的操作就是清除已取消的线程结点;若前驱=0,说明此时前驱仍处于初始化状态,将其改为SIGNAL状态即可阻塞。**
 
 知识点:类与方法的继承实现关系、方法要实现什么功能、`acquireQuue()`中 可以尝试获取锁的前提条件、`acquireQuue()`的阻塞时机和自旋思想、中断处理、具体流程
 
@@ -859,9 +858,13 @@ private void unparkSuccessor(Node node) {
 }
 ```
 
-release总结：首先先调用`tryRelease()`尝试修改exclusiveThread和state,此时其他线程就已经可以通过`tryAcquire()`争夺到锁了。但是我们还需要唤醒在阻塞队列阻塞的线程，随后则找到阻塞队列中第一个没有被取消的线程,将其唤醒,让其尝试执行`tryAcquire()`争夺锁。
+release总结：首先先调用`tryRelease()`尝试修改exclusiveThread和state,此时其他线程就已经可以通过`tryAcquire()`争夺到锁了。但是我们还需要唤醒在阻塞队列阻塞的线程，随后则找到阻塞队列中找到当前头节点的后继,将其唤醒,让其尝试执行`tryAcquire()`争夺锁。
 
 知识点：执行流程
+
+##### 4、`tryLock()`与`lockInterruptibly()`
+
+这两个方法的流程大致与普通的`lock()`相同,不同点在于他们各自的`acquireQueue()`实现（`doAcquireNanos()`和`doAcquireInterruptibly()`）。前者将会调用`LockSupport.parkNano()`以阻塞指定的时间,如果线程被唤醒时还没有超过deadLine,则尝试获取锁,若超过了就直接返回false。而后者只有一点不同，那就是如果在LockSupport中阻塞时被中断了，普通的`lock()`就会选择在争抢锁成功后返回中断标志;而`lockInterruptibly()`就会直接抛出一个异常。
 
 #### Ⅲ、AQS共享模式
 
@@ -921,6 +924,7 @@ private void doAcquireSharedInterruptibly(int arg)
             }
             //⭐请看ReentrantLock笔记对该方法的解释,在这里只需要知道的一个重点就是,这个方法会将当前线程结点的前驱的waitStatus从初始状态0设置为Signal,后面releaseShared()要用到
             if (shouldParkAfterFailedAcquire(p, node) &&
+                //挂起当前线程
                 parkAndCheckInterrupt())
                 throw new InterruptedException();
         }
@@ -1052,6 +1056,7 @@ private void setHeadAndPropagate(Node node, long propagate) {
         (h = head) == null || h.waitStatus < 0) {
         Node s = node.next;
         if (s == null || s.isShared())
+            //唤醒的具体逻辑
             doReleaseShared();
     }
 }
@@ -1073,12 +1078,13 @@ private void doReleaseShared() {
             int ws = h.waitStatus;
             //再插入线程结点时,shouldParkAfterFailedAcquire(p, node)已经将前驱(即头结点)的waitStatus设置为了Signal
             if (ws == Node.SIGNAL) {
-                //将结点状态从SIGNAL CAS设置为0
+                //将结点状态从SIGNAL CAS设置为0,失败的原因请看下面的退出逻辑
                 if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
                     continue;            // loop to recheck cases
                 //请看ReentrantLock的注释,该方法会将当前结点的后继结点唤醒
                 unparkSuccessor(h);
             }
+            //在state=0时又有线程调用了await(),这条线程就会来到这里
             else if (ws == 0 &&
                      
                      !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
@@ -1097,13 +1103,13 @@ for循环退出逻辑:
 
 2. h != head：头节点被刚刚唤醒的线程（这里可以理解为 t4）占有，那么这里重新进入下一轮循环，唤醒下一个节点（这里是 t4 ）。我们知道，等到 t4 被唤醒后，其实是会主动唤醒 t5、t6、t7...，那为什么这里要进行下一个循环来唤醒 t5 呢？我觉得是出于吞吐量的考虑。
 
-###### 4、小结
+###### 4、小结(记队列的运作)
 
 整体思路:
 
-1. 多个线程调用`await()`,来到`doAcquireInterruptibly()`,若`countDown()`线程数还没有到达目标个数,该方法会将全部调用`await()`的线程包装成结点放入一个头结点为空节点的阻塞队列
-2. 当多个线程调用`countDown()`使得state=0,此时方法调用就进入了`doReleaseShared()`该方法将唤醒空头结点的后继结点,并将后继结点设置为头结点
-3. 当后继节点被唤醒后,在阻塞工作线程的`doAcquireInterruptibly()`方法体内,调用`setHeadAndPropagate(node, r)`进而调用`doReleaseShared`将 ⭐`有线程的头结点的后继节点`唤醒。随着各个结点都变为头结点，也都将头结点的后继节点唤醒并将后继节点变为头结点，从而所有的节点都能够被唤醒。
+1. 多个线程调用`await()`,来到`doAcquireInterruptibly()`,若`countDown()`线程数还没有到达目标个数,该方法会将全部调用`await()`的线程包装成结点放入一个头结点为空节点的阻塞队列，同时将当前结点的前驱的status设置为SIGNAL。这样设置的含义其实是作为当前线程(SIGNAL结点的后继线程)是否已经执行到`shouldParkAfterFailedAcquire()`的标志,执行到该方法时才说明该线程将会被挂起,因为在他之前执行的`doAquireShared()`方法内逻辑是先将线程加入队列再检测`tryAcquireShared()`,如果此方法返回1则说明这条线程会和`countdown()`线程一样来到`doReleaseShared()`执行释放逻辑,这时候这条线程可能会直接退出,也可能会协助唤醒(注意CountDownLatch运作完毕时调用`await()`一般会直接返回false,而这个刚好和最后一个`countdown()`调用了才会出现这种状况)。
+2. 当多个线程调用`countDown()`使得state=0,此时方法调用就进入了`doReleaseShared()`，若空头结点的status为SIGNAL,则说明其后继结点的线程在阻塞,所以该方法将唤醒空头结点的后继结点,并将后继结点设置为头结点
+3. 当后继节点被唤醒后,在阻塞工作线程的`doAcquireInterruptibly()`方法体内,调用`setHeadAndPropagate(node, r)`进而调用`doReleaseShared()`继续检测当前头结点的status是否为SIGNAL,若是则将 ⭐`有线程的头结点的后继节点`唤醒。随着各个结点都变为头结点，也都将头结点的后继节点唤醒并将后继节点变为头结点，从而所有的节点都能够被唤醒。
 
 #### Ⅳ、Condition
 
@@ -1158,7 +1164,7 @@ public final void await() throws InterruptedException {
 ```java
 private Node addConditionWaiter() {
     Node t = lastWaiter;
-    // 如果队列中的最后一个结点的状态是被取消的（即Node，cancled,如果在线程没有获取锁时就调用condition.await()方法,fullRelease()方法则会将该结点标记为取消状态）
+    // 如果队列中的最后一个结点的状态是被取消的（即Node.cancled,如果在线程没有获取锁时就调用condition.await()方法,fullRelease()方法则会将该结点标记为取消状态）
     if (t != null && t.waitStatus != Node.CONDITION) {
         //(接ls)则从头到尾遍历条件队列删除所有为取消状态的结点
         unlinkCancelledWaiters();
@@ -1221,6 +1227,7 @@ final long fullyRelease(Node node) {
             failed = false;
             return savedState;
         } else {
+            //没有在锁中调用await(),直接抛出异常而没有处理队列
             throw new IllegalMonitorStateException();
         }
     } finally {
@@ -1306,7 +1313,7 @@ final boolean transferAfterCancelledWait(Node node) {
 
 所以在`await()`过程中中断的机制则是,如果在`signal()`之前被中断,则`await()`方法抛出异常**(但线程此时仍然是获取了锁的)**;如果在`signal()`之后被中断,则只是重新对线程设置中断标志,并让线程继续执行.
 
-await总结:当线程调用`await()`方法后,首先`await()`会将当前线程包装成node加入condition条件队列队尾,然后释放线程持有的锁并从阻塞队列中唤醒一个线程从而让这个线程尝试争夺锁，然后就调用`LockSupport.park()`将当前线程挂起。当有其他线程调用`signal()`后,该条线程可能在阻塞队列中等待被唤醒,也可能在阻塞队列中直接被唤醒了(具体看`signal()`)。(这里不讲中断机制,中断还需看上面理解)由于此时node已经进入了阻塞队列便可以跳出让其挂起的while循环，随后则调用`acquireQueue()`尝试获取独占锁以继续进行,获取成功后便返回。
+await总结:当线程调用`await()`方法后,首先`await()`会将当前线程包装成status为CONDITION的node加入condition条件队列队尾，其中若发现当前结点的前驱status不为CONDITION，则说明这条线程被取消了（不持有锁却调用`await()`），之后就会遍历整个队列清除这些被取消的结点。然后调用`release()`方法释放线程持有的锁(获取锁之后线程就不在阻塞队列中了,所以此时阻塞队列状态不变)(若此时当前线程不持有锁,则直接抛出异常并更改结点status为CANCLED,而此结点仍然在条件队列中)并从阻塞队列中唤醒一个线程从而让这个线程尝试争夺锁，然后就调用`LockSupport.park()`将当前线程挂起。当有其他线程调用`signal()`后,该条线程可能在阻塞队列中等待被唤醒,也可能在阻塞队列中直接被唤醒了(具体看`signal()`)。(这里不讲中断机制,中断还需看上面理解)由于此时node已经进入了阻塞队列便可以跳出让其挂起的while循环，随后则调用`acquireQueue()`尝试获取独占锁以继续进行,获取成功后便返回。
 
 知识点：==中断机制==、执行顺序、唤醒时机
 
@@ -1357,6 +1364,138 @@ final boolean transferForSignal(Node node) {
 }
 ```
 
-signal总结:线程调用`signal()`,首先`signal()`会移除当前condition条件队列的队头==(按调用`await()`的顺序将结点转移到阻塞队列,且**如果条件队列中没有结点,则直接返回**)==,并尝试将其放入阻塞队列队尾中。期间需要判断这个结点是否被取消，如果判断出被取消了则要取出下一个队头直到当前结点没有被取消。然后调用CAS设置state(从CONDITION到0)与调用`enq()`方法将结点加入阻塞队列。根据条件唤醒线程后,方法结束。
+signal总结:线程调用`signal()`,首先`signal()`会移除当前condition条件队列的队头==(按调用`await()`的顺序将结点转移到阻塞队列,且**如果条件队列中没有结点,则直接返回**)==,设置该结点status为0并尝试将其放入阻塞队列队尾中。期间需要判断这个结点是否被取消，如果判断出被取消了则要取出下一个队头直到当前结点没有被取消。然后调用CAS设置state(从CONDITION到0)与调用`enq()`方法将结点加入阻塞队列等待获取独占锁。
 
-知识点：执行顺序、唤醒时机、唤醒地点
+### 五、读写锁原理
+
+先来大致说下原理。`ReentrantReadWriteLock`内有一个内部类Sync,Sync继承自AQS同时实现了其共享模式和独占模式。而还有两个内部类分别是`ReadLock`和`WriteLock`则分别对调用Sync实现的方法。要注意的就是这里，读锁还是写锁将共用同一个state和阻塞队列，其中state高十六位表示共享模式读锁获取次数（包括重入），低十六位表示独占模式写锁重入次数。这样一想其实大致思路就出来了。
+
+#### Ⅰ、读锁
+
+##### ①、读锁获取
+
+`tryAcquireShared()`方法实现:如果当前有线程获取了写锁且该线程不是自己,那么直接返回-1以加入阻塞队列。若没有线程获取写锁或者是获取了写锁但是线程是自己，则继续执行。然后判断的是是否要将该线程加入阻塞队列。分两种情况：
+
+1. 若当前的读锁是非公平锁，且阻塞队列中头结点的后继是一个写结点，则加入阻塞队列。也就是说读写锁将赋予写锁更高的优先级让阻塞中的写线程先于后来的读线程执行，以避免其饥饿。
+2. 若当前的读锁是公平锁，如果阻塞队列中有结点则都加入阻塞队列，这就是公平。
+
+经过上两步判断后则可以进行循环CAS状态state以获取读锁。
+
+##### ②、读锁释放
+
+`tryReleaseShared()`检测是否共享state-1后整个state值已经为0,若为0则说明已经没有线程持有读锁和写锁,此时就可以返回true以唤醒后继的写线程。
+
+#### Ⅱ、写锁
+
+##### ①、写锁获取
+
+`tryAcquire()`将检测是否有线程获取了写锁或读锁(若是读锁则包括当前线程),直接返回false以加入阻塞队列。若上一步检测成功，随后就同样分两种情况：
+
+1. 若是公平锁且阻塞队列有线程，则直接进入阻塞队列不CAS状态state
+2. 若是非公平锁，则可以CAS状态state
+
+CAS成功后则成功获取了写锁。
+
+##### ②、写锁释放
+
+`tryReleased()`将会检测是否当前重入的锁都已经释放了,若已经释放了就直接返回true唤醒阻塞队列线程即可。
+
+
+
+比较需要注意的是，读锁阻塞被唤醒后是会无限传播唤醒的，而写锁只会唤醒自己这个线程，这就是巧妙的地方（但是也完全有可能当前有线程持有读锁，而阻塞队列也有读锁在阻塞的情况）。
+
+### 六、CyclicBarrier原理
+
+与CountDownLatch不同，CyclicBarrier使用重入锁和Condition实现的。
+
+#### Ⅰ、成员变量
+
+看一下它的成员变量
+
+```java
+public class CyclicBarrier {
+    //CyclicBarrier 是可以重复使用的，我们把每次从开始使用到穿过栅栏当做"一代"，或者"一个周期"
+    private static class Generation {
+        boolean broken = false;
+    }
+
+    /** The lock for guarding barrier entry */
+    private final ReentrantLock lock = new ReentrantLock();
+
+    // CyclicBarrier 是基于 Condition 的
+    // Condition 是“条件”的意思，CyclicBarrier 的等待线程通过 barrier 的“条件”是大家都到了栅栏上
+    private final Condition trip = lock.newCondition();
+
+    // 参与的线程数
+    private final int parties;
+
+    // 如果设置了这个，代表越过栅栏之前，要执行相应的操作
+    private final Runnable barrierCommand;
+
+    // 当前所处的“代”
+    private Generation generation = new Generation();
+
+    // 还没有到栅栏的线程数，这个值初始为 parties，然后递减
+    // 还没有到栅栏的线程数 = parties - 已经到栅栏的数量
+    private int count;
+
+    public CyclicBarrier(int parties, Runnable barrierAction) {
+        if (parties <= 0) throw new IllegalArgumentException();
+        this.parties = parties;
+        this.count = parties;
+        this.barrierCommand = barrierAction;
+    }
+
+    public CyclicBarrier(int parties) {
+        this(parties, null);
+    }
+```
+
+#### Ⅱ、方法原理分析
+
+##### ①、`await()`
+
+直接说原理。
+
+首先先获取重入锁，然后检测栅栏是否有被打破，若被打破则要抛出异常。若没有被打破则计算--count的值是否已经等于0，若等于0则首先运行给定的barrierCommand操作，之后在调用`nextGeneration()`首先调用`Condition.signalall()`将所有在Condition中的线程唤醒,然后新建一个`Generation`对象赋值给成员变量以表示开始下一代。若--count的值没有等于0，则调用`Condition.await()`等待。最后释放重入锁。
+
+##### ②、`nextGeneration()`
+
+```java
+private void nextGeneration() {
+    // 首先，需要唤醒所有的在栅栏上等待的线程
+    trip.signalAll();
+    // 更新 count 的值
+    count = parties;
+    // 重新生成“新一代”
+    generation = new Generation();
+}
+```
+
+`nextGeneration()`用于开启新一代的CyclicBarrier，然后将所有在Condition中的线程唤醒。
+
+##### ③、`reset()`
+
+```java
+public void reset() {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        breakBarrier();   // break the current generation
+        nextGeneration(); // start a new generation
+    } finally {
+        lock.unlock();
+    }
+}
+private void breakBarrier() {
+    // 设置状态 broken 为 true
+    generation.broken = true;
+    // 重置 count 为初始值 parties
+    count = parties;
+    // 唤醒所有已经在等待的线程
+    trip.signalAll();
+}
+```
+
+打破栅栏并开启新一代CyclicBarrier,将所有在Condition中的线程唤醒,然后在条件队列中的线程会通过抛出 BrokenBarrierException 异常返回。
+
