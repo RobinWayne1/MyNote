@@ -162,7 +162,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 
 使用`rateLimiter.tryAcquire()`方法时，过剩的流量会丢弃
 
-### 二.线程池
+### 二、线程池
 
 ![在这里插入图片描述](http://www.pianshen.com/images/108/265844bed9e9eeb918b14ff2c94d130c.png)
 
@@ -173,7 +173,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
   - ```java
     
     public interface ExecutorService extends Executor {
-        //使用线程池线程执行任务，注意execute没有返回值
+        //Executor接口定义的方法，使用线程池线程执行任务，注意execute没有返回值
         void execute(Runnable command);
         //⭐不再接受新的任务同时等待已提交的任务完成(虽然interruptIdleWorkers()里有对工作线程的interrupt()但是不会执行)
         void shutdown();
@@ -215,11 +215,17 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 
 以上成员均在 java.util.concurrent包中, 是 JDK并发包的核心类。其中ThreadpoolExecutor表示一个线程池。 ==Executor**s**类==则扮演着线程池工厂的角色,通过 Executors可以取得一个拥特定功能的线程池。从 UML图中亦可知, ThreadPoolExecutor类实现了 Executor接口, 因此通过这个接口, 任何 Runnable的对象都可以被 ThreadPoolExecutor线程池调度。
 
-#### 1.==Executors工厂类(看准了和Excutor的区别)==
+#### 1、线程池的生命周期
+
+![](E:\Typora\MyNote\resources\Java\Java高并发\线程池状态.png)
+
+![](E:\Typora\MyNote\resources\Java\Java高并发\线程池生命周期.png)
+
+#### 2、==Executors工厂类(看准了和Excutor的区别)==
 
 Executor框架提供了各种类型的线程池，主要有以下工厂方法：
 
-##### ①newFixedThreadPool()
+##### ①、newFixedThreadPool()
 
 
 创建==固定数目线程==的线程池。该线程池中的线程数量始终不变。当有一个新的任务提交时，线程池中若有空闲线程，则立即执行。**若没有，则新的任务会被暂存在一个任务队列中，待有线程空闲时，便处理在任务队列中的任务。**
@@ -230,7 +236,7 @@ public static ExecutorService newFixedThreadPool(int nThreads){
                                       new LinkedBlockingQueue<Runnable>());
 }
 ```
-##### ②newSingleThreadExecutor()
+##### ②、newSingleThreadExecutor()
 
 该方法返回一个==只有一个线程==的线程池。若多于一个任务被提交到该线程池，任务会被保存在一个任务队列中，待线程空闲，按先入先出顺序执行队列中的任务。
 
@@ -241,7 +247,7 @@ public static ExecutorService newSingleThreadExecutor(){
                                     0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>()));}
 ```
-##### ③newCachedThreadPool()
+##### ③、newCachedThreadPool()
 
 该方法返回一个可==根据实际情况调整线程数量==的线程池。线程池的线程数量不确定，但若有空闲线程可以复用，则会优先使用可复用的线程。如果现有线程没有可用的，则创建一个新线程并添加到池中。终止并从线程池中移除哪些已经60秒钟未被使用的线程。
 
@@ -252,14 +258,14 @@ public static ExecutorService newCachedThreadPool(){
                                       60L, TimeUnit.SECONDS,
                                       new SynchronousQueue<Runnable>());}
 ```
-##### ④newSingleThreadScheduledExecutor()
+##### ④、newSingleThreadScheduledExecutor()
 
 该方法返回一个ScheduledExecutorService对象，线程池==大小为1==。ScheduledExecutorService接口在ExecutorService接口之上**扩展了在给定时间执行某任务的功能，如在某个固定的延时之后执行，或者周期性执行某个任务。**
 
 ```java
 public static ScheduledExecutorService newSingleThreadScheduledExecutor(){};
 ```
-##### ⑤newScheduledThreadPool()
+##### ⑤、newScheduledThreadPool()
 
 该方法返回一个ScheduledExecutorService对象，可以指定线程数量。
 
@@ -267,7 +273,7 @@ public static ScheduledExecutorService newSingleThreadScheduledExecutor(){};
 public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize){};
 ```
 
-#### 2.核心线程池内部实现
+#### 3、核心线程池内部实现
 
 Executors工厂类中不同的工厂方法创建出完全不同功能的线程池,但是其内部都使用了ThreadPoolExecutor类
 
@@ -286,15 +292,16 @@ public ThreadPoolExecutor(int corePoolSize,//线程池中的线程数量
 * keepAliveTime:线程池线程超过corePoolSize时,多余的空闲线程存活时间**(只对于创建newCachedThreadPool()时有用,因为其他两个工厂方法线程数量不会超过corePoolSize)**
 * unit:keepAliveTime的单位
 * ==**workQueue:任务队列,被提交但尚未被执行的任务**==
-* threadFactory:线程工厂,用于个性化创建线程,如要处理线程池中线程抛出的非受查异常,则可以为Thread构造一个UncaughtExceptionHandler以处理这些非受查异常
+* threadFactory:线程工厂,实现`newThread()`方法用于个性化创建线程。如要处理线程池中线程抛出的非受查异常,则可以在此处为Thread构造一个UncaughtExceptionHandler以处理这些非受查异常。
 * ==handler:拒绝策略.当任务太多来不及处理时如何拒绝任务==
 
 ##### ==⭐(1)线程池工作方式==
 
-1. 如果运行的线程少于 corePoolSize，**则 Executor 始终首选添加新的线程（无论是否有空闲线程都会创建新线程）**，而不进行排队。（如果当前运行的线程小于corePoolSize，则任务根本不会存放到queue中)
-2. 如果运行的线程等于或多于 corePoolSize，==则 Executor 始终首选将请求加入队列==，**而不添加新的线程**。
-3. 如果无法将请求加入队列（队列已满），则创建新的线程，除非创建此线程超出 maximumPoolSize，如果超过，在这种情况下，新的任务将被拒绝。
-4. 线程池线程超过corePoolSize时,多余的线程的空闲时间超过了keepAliveTime，则将线程回收
+1. 首先检测线程池运行状态，如果不是RUNNING，则直接拒绝，线程池要保证在RUNNING的状态下执行任务。
+2. 如果运行的线程少于 corePoolSize，**则 Executor 始终首选添加新的线程（无论是否有空闲线程都会创建新线程）**，而不进行排队。（如果当前运行的线程小于corePoolSize，则任务根本不会存放到queue中)
+3. 如果运行的线程等于或多于 corePoolSize，==则 Executor 始终首选将请求加入队列==，**而不添加新的线程**。
+4. 如果无法将请求加入队列（队列已满），则创建新的线程，除非创建此线程超出 maximumPoolSize，如果超过，在这种情况下，新的任务将被拒绝。
+5. 线程池线程超过corePoolSize时,多余的线程的空闲时间超过了keepAliveTime，则将线程回收
 
 ##### (2)workQueue (不要把任务队列和工作线程数混为一谈,任务队列只是一个条件队列)
 
@@ -325,11 +332,11 @@ jdk内置拒绝策略如下:
 * DiscardOldestPolicy(抛弃最旧策略):该策略**丢弃最老的一个请求,也就是即将被执行的一个任务**,并尝试再次提交当前任务
 * DiscardPolicy(抛弃策略):默默丢弃无法处理的任务
 
-#### 3.扩展线程池
+#### 4、扩展线程池
 
 ThreadPoolExecutor是一个可以扩展的线程池,它提供了beforeExecute(),afterExecute()和terminated()三个接口用来对线程池进行控制,前两个方法将会在执行任务的线程中调用,可以在创建线程池时重写这几个方法.
 
-#### 4.分而治之:Fork/Join框架
+#### 5、分而治之:Fork/Join框架
 
 将一个大任务fork成多个子任务,交给多个线程分别执行,然后调用join()方法等待所有子任务执行完毕之后主线程才开始继续执行.
 
@@ -337,7 +344,7 @@ ThreadPoolExecutor是一个可以扩展的线程池,它提供了beforeExecute(),
 
 由于线程池的优化,提交的任务和线程数量并不是一对一的关系,**在绝大多数情况下,一个物理线程实际上是需要处理多个逻辑任务的.因此每个线程必然需要拥有一个双端任务队列.**所以有可能出现这样一种情况:线程A已经把自己的任务都执行完了,线程B还有一堆任务等着处理.**此时线程A就会帮助线程B,从线程B的双端队列的队尾中拿一个任务过来处理,尽可能达到平衡**，==这就是工作密取模式。==
 
-#### 5.线程池对异步调用的支持
+#### 6、线程池对异步调用的支持
 
 ```java
 	//参数是Callable类的对象,调用后返回FutureTask从而可以获取task的结果
@@ -352,7 +359,7 @@ ThreadPoolExecutor是一个可以扩展的线程池,它提供了beforeExecute(),
 
 这是ExecutorService接口的方法,由AbstractExecutorService实现了这些方法。相较于普通的`Executor.execute()`,与上面FutureTask讲到的一样,都增加了异常返回；同时也增加了个性化的接口调用。当然,`Executor.execute(futureTask)`不算作异步调用,因为他都没有返回值。。
 
-#### 6.CompletionService:Executor与Future的结合
+#### 7、CompletionService:Executor与Future的结合
 
 ### 三.JDK并发容器
 
@@ -1499,3 +1506,8 @@ private void breakBarrier() {
 
 打破栅栏并开启新一代CyclicBarrier,将所有在Condition中的线程唤醒,然后在条件队列中的线程会通过抛出 BrokenBarrierException 异常返回。
 
+### 七、阻塞/非阻塞，同步/异步概念含义
+
+同步任务的发起线程在其发起该任务之后必须等待该任务执行结束才能执行其他操作，这种等待往往意味着任务发起的线程会被暂停，这就是阻塞。
+
+异步任务的发起线程在其发起该任务之后不必等待任务执行结束便可执行其他操作，所以异步任务发起线程不必因为等待而阻塞，这就是非阻塞。

@@ -731,6 +731,23 @@ select * from subtitle inner join(select v_name from type where v_type='传记')
 * colomn:colomn是用来指定关联查询时用作关联的那个字段。
 * select：指定的是懒加载时所需触发的SQL的Statement Id
 
+## 五、与hibernate比较
+
+1. hibernate是全自动，而mybatis是半自动。
+
+hibernate完全可以通过对象关系模型实现对数据库的操作，拥有完整的JavaBean对象与数据库的映射结构来自动生成sql。而mybatis仅有基本的字段映射，对象数据以及对象实际关系仍然需要通过手写sql来实现和管理。
+
+2. hibernate数据库移植性远大于mybatis。
+
+hibernate通过它强大的映射结构和hql语言，大大降低了对象与数据库（oracle、mysql等）的耦合性，而mybatis由于需要手写sql，因此与数据库的耦合性直接取决于程序员写sql的方法，如果sql不具通用性而用了很多某数据库特性的sql语句的话，移植性也会随之降低很多，成本很高。
+
+3. hibernate拥有完整的日志系统，mybatis则欠缺一些。
+
+hibernate日志系统非常健全，涉及广泛，包括：sql记录、关系异常、优化警告、缓存提示、脏数据警告等；而mybatis则除了基本记录功能外，功能薄弱很多。
+
+4. sql直接优化上，mybatis要比hibernate方便很多
+
+由于mybatis的sql都是写在xml里，因此优化sql比hibernate方便很多。而hibernate的sql很多都是自动生成的，无法直接维护sql；虽有hql，但功能还是不及sql强大，见到报表等变态需求时，hql也歇菜，也就是说hql是有局限的；hibernate虽然也支持原生sql，但开发模式上却与orm不同，需要转换思维，因此使用上不是非常方便。总之写sql的灵活度上hibernate不及mybatis。
 
 
 > 参考资料

@@ -310,11 +310,11 @@ private final Map<String, Object> singletonObjects = new ConcurrentHashMap<Strin
 //用于保存BeanName和ObjectFactory工厂之间的关系,用于循环依赖出现的第一次时得到未初始化完的bean实例,之后立马删除这个工厂.这个三级缓存的特点是:1.获取ObjectFactory之后调用objectFactor.getObject()会应用要获取的bean的后处理器,如这个bean中的有方法属于AOP增强的目标,则AnnotaionAwareAutoProxyCreator将会应用于改本bean,将该bean用JDK动态代理包装后才返回2.此时Spring还没有对该bean进行属性注入
 private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<String, ObjectFactory<?>>(16);
 
-//当第二次实现循环依赖又来到此bean时,该成员变量将会返回未初始化完的bean实例给getBean()的调用者.这个二级缓存的特点是:1.存入二级缓存的Bean此时都已应用了后处理器2.此时Spring还没有对该bean进行属性注入
+//当对某对象的第二次实现循环依赖又来到此bean时,该成员变量将会返回未初始化完的bean实例给getBean()的调用者.这个二级缓存的特点是:1.存入二级缓存的Bean此时都已应用了后处理器2.此时Spring还没有对该bean进行属性注入
 private final Map<String, Object> earlySingletonObjects = new HashMap<String, Object>(16);
 ```
 
-
+主要逻辑如下：
 
 ```java
 protected Object getSingleton(String beanName, boolean allowEarlyReference) {
@@ -1444,6 +1444,14 @@ public class ReplacementComputeValue implements org.springframework.beans.factor
 
 也可以在类头添加注解`@DependsOn()`。用于声明当前bean依赖于另外一个bean，所依赖的bean会被容器确保在当前bean实例化之前被实例化。
 
+### 4、@Autoweired歧义性
+
+`@Autoweired`是根据类型的自动装配,那如果有多个实现类bean实现了这个类型接口name，Spring该如何知道使用哪个?
+
+1. 设置首选的Component，通过@Primary进行标注（如果多处都标注，依然出现歧义性问题）；
+
+2. 限定自动装配的bean，在自动装配注解出添加注解@Qualifier(“name”)，其中name为bean的ID（默认bean 
+
 ## 三、Spring bean的生命周期
 
 <img src="E:\Typora\MyNote\resources\Spring\Spring生命周期1.png" style="zoom:75%;" />
@@ -1456,6 +1464,30 @@ public class ReplacementComputeValue implements org.springframework.beans.factor
 2. 实现了`BeanPostProcessor`的Bean会在注册时调用`getBean()`提前初始化
 3. 由于`@PostConstruct`入口在`postProcessBeforeInitialization()`,所以他会先行执行与`afterPropertiesSet()`
 4. 而`@PreDestory`入口在`postProcessBeforeDestruction()`,所以标注的方法会在`destory()`之前执行
+
+## 四、Spring bean的作用域
+
+Spring中Bean有**五种scope**，**singleton** **prototype** **request** **session** **globalSession**  
+
+1. singleton为默认值，IOC容器中仅存在一个Bean实例，Bean都以**单例模式**存在 
+2. prototype，在每次调用`getBean()`获取Bean的时候，都会**创建一个新的实例**
+3. request，在每一次**http请求**时会创建一个实例，该实例仅在当前**http** **request**有效 
+4. session，在每一次**http****请求**时会创建一个实例，该实例仅在当前**http** **session**有效 
+5. globalSession，全局Session，供**不同的portlet**共享，portlet好像是类似于servlet的Web组件
+
+## 五、Spring事务
+
+### Ⅰ、事务隔离级别
+
+![](E:\Typora\MyNote\resources\Spring\事务隔离级别.png)
+
+### Ⅱ、事务传播机制
+
+![](E:\Typora\MyNote\resources\Spring\事务传播机制.png)
+
+### Ⅲ、事务回滚机制（`@Transational(rollbackFor="")`）
+
+![](E:\Typora\MyNote\resources\Spring\回滚机制.png)
 
 
 > 参考资料
