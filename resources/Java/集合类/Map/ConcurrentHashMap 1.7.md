@@ -90,6 +90,7 @@ static final class HashEntry<K,V> {
 #### Ⅱ、Segment
 
 ```java
+//ReentrantLock的子类
 //成员变量
 //tryLock()的自旋重试次数
 static final int MAX_SCAN_RETRIES =

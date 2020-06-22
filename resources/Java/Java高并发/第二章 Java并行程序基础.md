@@ -21,6 +21,7 @@
 
 * 一种则是创建 直接继承Thread类 的MyThread类 的对象,并将`run()`方法覆盖,使用时就可直接调用父类`Thread.start()`执行`MyThread.run()`执行线程
 * 一种则是实现Runnable接口,然后通过Thread的构造器将实现Runnable接口的类对象赋值到成员变量target中,随后调用`Thread.start()`执行`Thread.run()`执行`MyRunnable.run`从而执行线程
+* 还有一种是实现Callable接口通过FutureTask包装器来创建Thread线程。**Callable必须和FutureTask绑定使用，所以问Callable和Runnable的区别其实就是问FutureTask和Runnable的区别。从继承关系，返回值，调用的方法方面来讲。**
 
 Java不支持多重继承而可以支持多重实现,所以第二种方法会比较解耦。
 

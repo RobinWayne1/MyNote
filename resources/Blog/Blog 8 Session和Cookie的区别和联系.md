@@ -267,4 +267,7 @@ Cookies完全是可见的，即使程序员设定了Cookies的生存周期（比
 长于10K的数据，不要用到Cookies。 
 也不要用Cookies来玩点让客户惊喜的小游戏。
 
+session和cookie
 
+1. session对象存在服务器，生命周期（默认30分钟），一般以cookie实现，发送请求时cookie一并携带jsessionid给服务器，服务器就根据id得出相应的session对象，若不设置cookie生命周期则关闭浏览器时cookie记录的jsessionid就消失；使用URL信息记录，这样就需要服务端解析；或使用隐藏域。
+2. cookie存放在浏览器，一般关闭浏览器则消失。发请求后，若服务器要使用cookie则会将cookie信息通过响应报文发送给浏览器。若之后浏览器再发送请求该该服务器，则请求会携带上cookie信息。安全性问题。不可跨域性。

@@ -1,8 +1,10 @@
-
-
 # 第十一章 Spring MVC
 
-### 一.ContextLoaderListener
+### SpringMVC基本原理
+
+![](E:\Typora\MyNote\resources\Spring\SpringMVC原理.png)
+
+### 二、ContextLoaderListener
 
  ContextLoaderListener的作用是再启动web容器时,自动装配ApplicationContext的配置信息.由于它实现了ServletContextListener这个接口,==在web.xml配置这个监听器,启动容器时就会默认执行它实现的方法(即创建ServletContext对象的时候调用`contextInitialized()`),使用这个接口可在为客户端请求提供服务之前向ServletContext中添加任意对象==。这个对象在ServletContext启动的时候被初始化，然后在ServletContext整个运行期间都可见，且每个应用都有一个ServletContext。
 
@@ -30,7 +32,7 @@ contextInitialized(ServletContextEvent event)
 }
 ```
 
-### 二.DispatcherServlet
+### 三、DispatcherServlet
 
 DispatcherServlet实现HttpServlet接口,也就是实现了init(),service(),和destory()方法,当Web容器接收到某个servlet请求时,servlet把请求封装成一个HttpServletRequest对象传给Servlet对应的服务方法.
 
