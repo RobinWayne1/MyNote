@@ -136,14 +136,11 @@ Integer对象如果被当作锁,那千万不可以改变对象的值,例如如�
 
 <img src="E:\Typora\MyNote\resources\Java\Java高并发\Java线程生命周期.png" style="zoom:100%;" />
 
+* NEW：在新建一个Thread对象后就来到NEW状态
 * RUNNABLE:该状态可以被看成一个复合状态。它包括两个子状态: READY 和RUNNING。前者表示处于该状态的线程可以被线程调度器(Scheduler)进行调度而使之处于RUNNING状态。后者表示处于该状态的线程正在运行，即相应线程对象的run方法所对应的指令正在由处理器执行。执行`Thread.yield()`的线程，其状态可能会由RUNNING转换为READY。处于READY子状态的线程也被称为活跃线程。
-
 * BLOCKED:一个线程发-一个阻塞式I/O ( Blocking I/O) 操作后,或者申请一个由其他线程持有的独占资源(比如锁)时，相应的线程会处于该状态。处于BLOCKED状态的线程并不会占用处理器资源。当阻塞式I/O操作完成后，或者线程获得了其申请的资源，该线程的状态又可以转换为RUNNABLE。
-
 * WAITING:一个线程执行了某些特定方法之后就会处于这种等待其他线程执行另外一些特定操作的状态。能够使其执行线程变更为WAITING状态的方法包括:`Object.wait()`、`Thread.join()`和`LockSupport.park(Object)`。能够使相应线程从WAITING变更为RUNNABLE的相应方法包括: `Object.notify)/notifyAll()`和 `LockSupport.upark(Object)`。
-
 * TIMED_WAITING:该状态和WAITING类似，**差别在于处于该状态的线程并非无限制地等待其他线程执行特定操作，而是处于带有时间限制的等待状态。**当其他线程没有在指定时间内执行该线程所期望的特定操作时，该线程的状态自动转换为RUNNABLE。
-
 * TERMINATED:已经执行结束的线程处于该状态。由于一个线程实例只能够被启动一次，因此一个线程也只可能有一次处于该状态。`Thread.run()`正常返回或者由于抛出异常而提前终止都会导致相应线程处于该状态。
 
 一个线程在其整个生命周期中，只可能有一次处于NEW状态和TERMINATED状态。
