@@ -339,7 +339,7 @@ class Employee implements Cloneable
 
 #### 1、基本特性
 
-1. 接口中所有方法自动地属于public
+1. 接口中所有方法自动地属于`public abstract`
 2. 接口不能有实例域，接口中的域将被自动设为`public static final`
 3. 不能使用new实例化接口,接口并不能被实例化
 4. 每个类可以实现多个接口
@@ -436,7 +436,81 @@ catch(SQLException)
 
 ## 四、反射
 
-## 五、序列化
+## 五、Lambda表达式
+
+## 六、输入输出流
+
+`java.io`包下的流分为两大类：字符流（`Writer`和`Reader`）与字节流（`OutputStream`和`InputStream`）。字节流的特点是支持单个字节读取或者是读取一个字节数组（不依赖于读单个字节的本地方法`read0()`（以`FileInputStream`为例）,而字符流特点是支持单个Unicode码元的读取（以`FileReader`为例）。
+
+在讲四个主要接口之前，先来了解`File`类。File类是对文件系统中文件以及文件夹进行封装的对象，可以通过对象的思想来操作文件和文件夹，其保存了文件或目录的各种元数据信息，并提供了创建、删除文件和目录的方法。
+
+### Ⅰ、InputStream
+
+`InputStream`是一个抽象类,它提供了两个最重要的抽象方法给子类实现——`read()`和`read(byte[]b)`。其中`read()`用于读取一个字节，并将读取指针向后移动一位，若已经读取完毕`read()`就会返回-1，通常将该方法放在`while`循环中;而`read(byte[]b)`则会将输入流中的数据复制到byte数组b中。
+
+#### 1、`FileInputStream`
+
+这是基本的`InputStream`实现类,通过在构造函数中传入`File`对象以读取文件的信息.
+
+#### 2、`BufferedInputStream`
+
+这是一个装饰器。它的原理就是在内部维护一个8K的字节数组缓冲区,每当调用其`read()`时就移动字节数组缓冲区的pos指针。当pos指针移动到了字节数组末尾，则`read()`方法会自动调用被装饰者`InputStream.read(cache)`方法进行一次操作系统IO读取字节数组以填充缓冲区的数据,当没有数据可读时返回-1。
+
+该`InputStream`的优点是大大提高了读取的效率,如果单纯的用`FileInputStream.read()`,则要进行多次系统IO才会将数据读取完。而`BufferedInputStream`最主要的功能就是通过编码使得==缓冲区数据读取完后自动进行==**数组**读取系统IO，相比循环调用`FileInputStream.read()`提高了效率。
+
+#### 3、`PipedInputStream`
+
+管道字节输入流，它和PipedOutputStream一起使用，能实现**多线程间的半双工管道通信**
+
+#### 4、`ObjectInputStream`
+
+序列化对象输入流。
+
+### Ⅱ、OutputStream
+
+同样,`OutputStream`也是一个抽象类。他也有两个最重要的方法——`write(int)`写入字节与`write(byte[])`写入字节数组。
+
+#### 1、`FileOutputStream`
+
+和`FileInputStream`类似
+
+#### 2、`BufferedInputStream`
+
+这里就要注意一下。调用`BufferedInputStream.write()`并不会立刻进行系统IO,而是同样的将要写入的字节放入内部的缓冲区中。当调用的方法确定要进行系统IO写入文件时，调用`BufferedInputStream.flush()`将该缓冲区的数据通过`outputStream.write(byte[])`方法一次性写入文件,同样也提高了效率。
+
+#### 3、`PipedOutputStream`
+
+#### 4、`ObjectOutputStream`
+
+### Ⅲ、Reader
+
+Reader是处理字符流的一个接口，它同样提供了`read()`和`read(char[]c)`，然而这两个方法返回的都是char而不是byte。
+
+#### 1、`FileReader`
+
+以字符流的形式读取文件。下面来讨论一下它的原理。
+
+`FileReader`继承自`InputStreamReader`,而`InputStreamReader`的大致运行机制其实还是通过`InputStream`读入字节,只不过在读入字节之后将字节根据选择的解码方式将字节流转换为字符流。而默认的`InputStreamReader`的解码方式则是utf-8，如果想要转换该解码方式则要用自定义的`InputStreamReader`来包装`FileReader`。
+
+#### 2、`InputStreamReader`
+
+装饰者,用于对读入的**字节流**根据**解码方式**解码成字符，是连接字节流和字符流的桥梁。其构造器如下
+
+```java
+ public InputStreamReader(InputStream in, Charset cs)
+```
+
+其Charset有以下几种:`StandardCharsets.UTF_8`、`StandardCharsets.ISO_8859_1`、`StandardCharsets.UTF_16BE`、`StandardCharsets.US_ASCII`、`StandardCharsets.UTF_16LE``StandardCharsets.UTF_16`。
+
+#### 3、`BufferedReader`
+
+与`BufferedInputStream`类似。
+
+### Ⅳ、`Writer`
+
+与Redaer相类似
+
+## 七、序列化
 
 当两个Java进程要通信，或需要将一个对象存储到磁盘时，就可以使用序列化机制。序列化机制就是将对象的数据序列化写入到输出流中，并在之后将其读回就可以直接反序列化为一个对象。
 
