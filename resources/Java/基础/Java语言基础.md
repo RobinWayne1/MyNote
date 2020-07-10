@@ -438,6 +438,130 @@ catch(SQLException)
 
 ## 五、Lambda表达式
 
+Lambda表达式是用来代替匿名内部类写法的，它的出现让方法中实现接口的写法变得更加易读。Lamda表达式的使用场景是：**==对于只有一个抽象方法的接口==**，需要这种接口的对象时，就可以提供一个Lambda表达式（可以将Lambda表达式看作是匿名内部类的对象创建方式，就很容易理解了）。
+
+### Ⅰ、基本使用
+
+Lambda的基本写法：`()->{}`。其中括号表示接口唯一抽象方法中的参数列表，花括号内就写方法的实现。
+
+例：
+
+```java
+String []a={"aasda","asdads","a1d1d1"};
+Arrays.sort(a, new Comparator<String>()
+{
+    @Override
+    public int compare(String o1, String o2)
+    {
+        return o1.length()-o2.length();
+    }
+});
+```
+
+这是匿名内部类的写法，转换成Lambda表达式的写法如下：
+
+```java
+  String[] a = {"aasda", "asdads", "a1d1d1"};
+        Arrays.sort(a, (String o1, String o2) ->
+        {
+            return o1.length() - o2.length();
+        });
+```
+
+始终关注Lambda表达式代表接口对象就容易理解。
+
+### Ⅱ、特殊简写
+
+1. 参数列表的类型可以省略，即
+
+   ```JAVA
+   (o1, o2) ->
+           {
+               return o1.length() - o2.length();
+           }
+   ```
+
+2. 若抽象方法只有一个参数，还可以直接省略小括号
+
+   ```java
+   interface Say
+   {
+       void say(String s);
+   }
+   s->System.out.println(s)；
+   ```
+
+3. 若方法体只有一行代码，无论是否需要返回值，都可以省略return和花括号
+
+   ```sql
+   (o1, o2) -> o1.length() - o2.length()
+   ```
+
+### Ⅲ、方法引用
+
+在某些情况下，要实现的抽象方法需要调用某个现成的方法（也就是说Lambda表达式的实现只做一个传递参数值的作用），这种情况就要使用方法引用。
+
+方法引用要用`::`操作符分割方法名与对象或类名。主要有三种情况：
+
+1. `对象::实例方法名`
+2. `类名::静态方法名`
+3. `类名::实例方法名`:这种是特殊情况。主要用在抽象方法的第一个参数是实例方法的调用者 情况中。
+
+例:
+
+```java
+Arrays.sort(a, (o1, o2) -> o1.compareToIgnoreCase(o2));
+```
+
+可以简写成：
+
+```java
+Arrays.sort(a, String::compareToIgnoreCase);
+```
+
+### Ⅳ、构造器引用
+
+构造器引用和方法引用有些类似，只不过格式变成了`类名::new`。
+
+例：
+
+```java
+interface PersonFactory
+{
+    Person getPerson(String s);
+}
+class Person
+{
+    public Person()
+    {
+    }
+
+    public Person(String s, int a)
+    {
+    }
+
+    public Person(String s)
+    {
+    }
+
+    public Person(int a)
+    {
+    }
+
+  
+}
+```
+
+```java
+PersonFactory p=Person::new;
+```
+
+还有一个要注意的问题就是构造器的选取是根据抽象方法的参数做分派的,所以上面的例子将会使用Person的`String s`构造器。
+
+### Ⅴ、变量作用域
+
+Lambda表达式中可以访问外围方法或类中的变量，但是有一个极其重要的限制，那就只表达式中只能引用值不会改变的变量，无论是表达式外修改或是表达式内修改都会出现编译错误。
+
 ## 六、输入输出流
 
 `java.io`包下的流分为两大类：字符流（`Writer`和`Reader`）与字节流（`OutputStream`和`InputStream`）。字节流的特点是支持单个字节读取或者是读取一个字节数组（不依赖于读单个字节的本地方法`read0()`（以`FileInputStream`为例）,而字符流特点是支持单个Unicode码元的读取（以`FileReader`为例）。
