@@ -177,7 +177,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
         void execute(Runnable command);
         //⭐不再接受新的任务同时等待已提交的任务完成(虽然interruptIdleWorkers()里有对工作线程的interrupt()但是不会执行)
         void shutdown();
-        //⭐不接受新的任务且尝试取消(就是对工作线程调用interrupt(),如果工作线程不响应则一样无法取消)所有运行中的任务,并不再启动队列中未开始执行的任务,返回尚未启动的任务清单
+        //⭐不接受新的任务且尝试取消(就是对工作线程调用interrupt(),如果工作线程不响应则一样无法取消)所有运行中的任务,⭐并不再启动队列中未开始执行的任务,返回尚未启动的任务清单
         List<Runnable> shutdownNow();
         boolean isShutdown();
         boolean isTerminated();
@@ -216,6 +216,8 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 以上成员均在 java.util.concurrent包中, 是 JDK并发包的核心类。其中ThreadpoolExecutor表示一个线程池。 ==Executor**s**类==则扮演着线程池工厂的角色,通过 Executors可以取得一个拥特定功能的线程池。从 UML图中亦可知, ThreadPoolExecutor类实现了 Executor接口, 因此通过这个接口, 任何 Runnable的对象都可以被 ThreadPoolExecutor线程池调度。
 
 #### 1、线程池的生命周期
+
+注意看SHUTDOWN和STOP的区别
 
 ![](E:\Typora\MyNote\resources\Java\Java高并发\线程池状态.png)
 

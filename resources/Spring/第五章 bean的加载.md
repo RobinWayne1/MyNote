@@ -1444,14 +1444,6 @@ public class ReplacementComputeValue implements org.springframework.beans.factor
 
 也可以在类头添加注解`@DependsOn()`。用于声明当前bean依赖于另外一个bean，所依赖的bean会被容器确保在当前bean实例化之前被实例化。
 
-### 4、@Autoweired歧义性
-
-`@Autoweired`是根据类型的自动装配,那如果有多个实现类bean实现了这个类型接口name，Spring该如何知道使用哪个?
-
-1. 设置首选的Component，通过@Primary进行标注（如果多处都标注，依然出现歧义性问题）；
-
-2. 限定自动装配的bean，在自动装配注解出添加注解@Qualifier(“name”)，其中name为bean的ID（默认bean 
-
 ## 三、Spring bean的生命周期
 
 <img src="E:\Typora\MyNote\resources\Spring\Spring生命周期1.png" style="zoom:75%;" />
@@ -1488,6 +1480,28 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 ### Ⅲ、事务回滚机制（`@Transational(rollbackFor="")`）
 
 ![](E:\Typora\MyNote\resources\Spring\回滚机制.png)
+
+## 六、依赖注入歧义性解决
+
+### Ⅰ、`@autowired`
+
+#### 1、强制性
+
+`@autowired(required=false)`的含义是如果在自动注入该成员时没有找到可装配的Bean,就不强制装配了,该成员的值为null。若不进行该设置就会报`NoSuchBeanDefinitionException`
+
+#### 2、装配策略
+
+`@autowired()`默认是先使用`byType`来进行Bean的查找,若找到多个同Type的Bean如Service接口的多个实现,那么就将改用`byName`来依赖注入。注意这里的`byName`比较的是成员的变量名和具体的BeanID是否相等,也就是说要想`@autowired()`的`byName`成功注入就要将变量名改为实现类名的首字母小写。
+
+除此之外，还可以使用`@Qualifier`注解指定注入的Bean的名字。虽然好像多此一举，但是这个注解可以用在参数列表中，在`@Configuration`配置文件中`@Bean`方法参数中会用到。
+
+#### 3、优先级
+
+在`byType`出现多个Bean时,可以使用`@Primary`设置最高优先级的Bean,也可以用`@Priority(1)`来设置各Bean的优先级。
+
+### Ⅱ、`@Resources`
+
+具体的注入方式的用法和`@autoweired`一致,只不过`@Resources`是先进行名称注入后进行类型注入,且他是JDK的注解而不是Spring的
 
 
 > 参考资料

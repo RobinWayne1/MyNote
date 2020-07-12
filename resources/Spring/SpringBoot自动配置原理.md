@@ -121,7 +121,7 @@ public class DruidConfig
 
 ### 三、自定义stater
 
-**自定义stater的作用其实就是将整个业务拆成一个个模块，最后将各个模块以maven JAR包的形式整合进主模块中。Starter就是主模块和子模块的桥梁，它的作用就是启用这些导入的子模块，将这些子模块加入进主模块的Spring中进行管理。在starter内部的逻辑可以根据配置选择是否启用某个模块（也就是是否加载某个Configuration中的bean）。这样将模块拆开更能够方便业务扩展。**
+**自定义stater的作用其实就是将整个业务拆成一个个模块，最后将各个模块以maven JAR包的形式整合进主模块中（就不用复制粘贴代码了）。Starter就是主模块和子模块的桥梁，它的作用就是启用这些导入的子模块，将这些子模块加入进主模块的Spring中进行管理。在starter内部的逻辑可以根据配置选择是否启用某个模块（也就是是否加载某个Configuration中的bean）。这样将模块拆开更能够方便业务扩展。**
 
 自定义stater的具体逻辑其实就是用上面所讲的几个注解，自定义启用的条件。除此之外还需要在resources文件夹下面新建一个`META-INF/spring.factories`将这个starter写进其中，因为以JAR包的形式导入的starter要经过`AutoConfigurationImportSelector`扫描后才能够被其他模块启用。
 
