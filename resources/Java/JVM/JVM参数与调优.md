@@ -69,13 +69,15 @@ option参数解释：
 - -gcpermcapacity 永生代行为统计
 - -printcompilation HotSpot编译方法统计
 
-#### Ⅲ、jmap
+#### Ⅲ、jmap与jhat
 
 jmap是用来生**成堆dump文件**和查看堆相关的各类信息的命令，例如查看finalize执行队列，heap的详细信息和使用情况。
 
 命令格式：
 
 **jmap [option]  (连接正在执行的进程)**
+
+之后则可以通过**jhat**查看dump文件。
 
 #### Ⅳ、jstack
 

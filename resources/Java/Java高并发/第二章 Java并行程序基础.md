@@ -144,3 +144,10 @@ Integer对象如果被当作锁,那千万不可以改变对象的值,例如如�
 * TERMINATED:已经执行结束的线程处于该状态。由于一个线程实例只能够被启动一次，因此一个线程也只可能有一次处于该状态。`Thread.run()`正常返回或者由于抛出异常而提前终止都会导致相应线程处于该状态。
 
 一个线程在其整个生命周期中，只可能有一次处于NEW状态和TERMINATED状态。
+
+#### 11、线程间的通信方式
+
+1. wait/notify
+2. join
+3. 信号量、CountDownLatch、CyclicBarrier
+4. volatile
