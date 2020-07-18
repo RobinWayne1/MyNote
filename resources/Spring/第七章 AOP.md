@@ -2,11 +2,13 @@
 
 ### 一、增强的执行顺序
 
-`before`→`around`→`after`→不出错`afterReturning`
+`around`→`before`→`around`→`after`→不出错`afterReturning`
 
-​												→出错`afterThrowing`
+​																 →出错`afterThrowing`
 
 `@Order(value)`修饰切面时,`value`的值越大,则该切面所有的增强则会放在拦截器链的最前面;`value`的值越小,则该切面所有的增强都会放在拦截器链的最后面
+
+拦截器链顺序看最下面。
 
 ### 二、源码解析
 
