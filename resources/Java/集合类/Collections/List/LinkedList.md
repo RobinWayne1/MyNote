@@ -13,4 +13,6 @@ LinkedList与ArrayList的区别：
 
 3. 内存空间占用
 
+4. 双向链表与单链表
+
    

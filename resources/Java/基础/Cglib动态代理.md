@@ -963,7 +963,7 @@ public class Dao$$EnhancerByCGLIB$$27019bc7 extends Dao implements Factory {
 
 4. JDK动态代理的被代理类的内部调用不会触发`invoke()`方法(因为被代理类和代理类是两个完全不同的对象),而Cglib动态代理被代理类的内部调用将会触发`intercept()`(因为代理类是被代理类的子类,所以方法会动态分派到子类来执行)
 
-5. Cglib动态代理在生成代理类后还能重新制定`Callback`,而JDK动态代理的代理类一旦生成就无法再指定`InvokecationHandler`了
+5. Cglib动态代理在生成代理类后还能重新设定`Callback`（只能指定原来数量的callb  ack）,而JDK动态代理的代理类一旦生成就无法再指定`InvokecationHandler`了
 
 源码上的区别:
 

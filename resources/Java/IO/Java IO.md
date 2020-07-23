@@ -53,7 +53,9 @@ BIO即同步阻塞IO，==由**一条线程**来监听客户端的连接建立请
 
 <img src="E:\Typora\resources\Java\IO\NIO内核模型.jpg" style="zoom:50%;" />
 
-**Java NIO是多路复用IO==（并非是同步非阻塞IO）==，对于客户端的 连接建立 请求，代码逻辑(即为图中的AcceptorHandler)将会将此客户端对应的`SocketChannel`对象注册进Selector中,Selector将会将此`Socket`注册到内核中。当调用`selector.select()`时,Selector底层将会调用内核的`epoll_wait`,此时操作系统内核将不断轮询这些`socket`,一旦有至少一个`Socket`的数据传输到服务端时,`epoll_wait`将会返回,使得业务代码可以开启新线程处理客户端发来的请求.==*⭐⭐⭐⭐⭐⭐然而请注意，`epoll_wait`的返回只是因为数据传输到了服务端内核空间，若Java进程要读取这些数据，还需要将数据从内核空间复制到用户空间才能直接对数据进行处理，即`socketChannel.read(buffer)`其实是需要阻塞等待 数据从内核空间复制到用户空间,之后才能将数据读入`ByteBuffer`中,这是与AIO的一个最重要的区别*==**
+**Java NIO是多路复用IO==（并非是同步非阻塞IO）==，对于客户端的 连接建立 请求，代码逻辑(即为图中的AcceptorHandler)将会将此客户端对应的`SocketChannel`对象注册进Selector中,Selector将会将此`Socket`注册到内核中。当调用**
+
+**`selector.select()`时,Selector底层将会调用内核的`epoll_wait`,此时操作系统内核将不断轮询这些`socket`,一旦有至少一个`Socket`的数据传输到服务端时,`epoll_wait`将会返回,使得业务代码可以开启新线程处理客户端发来的请求.==*⭐⭐⭐⭐⭐⭐然而请注意，`epoll_wait`的返回只是因为数据传输到了服务端内核空间，若Java进程要读取这些数据，还需要将数据从内核空间复制到用户空间才能直接对数据进行处理，即`socketChannel.read(buffer)`其实是需要阻塞等待 数据从内核空间复制到用户空间,之后才能将数据读入`ByteBuffer`中,这是与AIO的一个最重要的区别*==**
 
 **⭐对比BIO的优点**:
 
@@ -71,11 +73,11 @@ Buffer类是读取传输数据的唯一途径,此类相当于一个数组，只�
 
 ###### ①、属性
 
-`position`:在写模式下,代表下一个写入字节的下标;在读模式中,代表下一个读取的字节的下标
+==`position`:在写模式下,代表下一个写入字节的下标;在读模式中,代表下一个读取的字节的下标==
 
-`limit`:在写模式下, 代表的是最多能写入数据的下标，这个时候 limit 等于 capacity(相当于array.length);在读模式下,代表实际数据的最大下标(相当于`ArrayList.size`)
+==`limit`:在写模式下, 代表的是最多能写入数据的下标，这个时候 limit 等于 capacity(相当于array.length);在读模式下,代表实际数据的最大下标(相当于`ArrayList.size`)==
 
-`capacity`:相当于`array.length`,但这个length是用`ByteBuffer.allocate()`分配大小的
+==`capacity`:相当于`array.length`,但这个length是用`ByteBuffer.allocate()`分配大小的==
 
 <img src="E:\Typora\resources\Java\IO\Buffer数据结构.png" style="zoom:50%;" />
 
@@ -359,7 +361,7 @@ public class AIOServer
         // 自己定义一个 Attachment 类，用于传递一些信息
         Attachment att = new Attachment();
         att.setServer(server);
-		//进行io_read系统调用，可以看看Linux的异步IO模型
+		//进行io_read系统调用，可以看看Linux的异步IO模型，这个方法不阻塞
         server.accept(att, new CompletionHandler<AsynchronousSocketChannel, Attachment>() {
             //Java进程收到操作系统IO完成的通知后，将用AsynchronousChannelGroups线程池的线程执行该方法
             @Override

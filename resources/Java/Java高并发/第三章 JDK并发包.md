@@ -229,8 +229,10 @@ Executor框架提供了各种类型的线程池，主要有以下工厂方法：
 
 ##### ①、newFixedThreadPool()
 
+创建==固定数目线程==的线程池。该线程池中的线程数量始终不变。当有一个新的任务提交时，线程池中若有空闲线程，则立即
 
-创建==固定数目线程==的线程池。该线程池中的线程数量始终不变。当有一个新的任务提交时，线程池中若有空闲线程，则立即执行。**若没有，则新的任务会被暂存在一个任务队列中，待有线程空闲时，便处理在任务队列中的任务。**
+执行。**若没有，则新的任务会被暂存在一个任务队列中，待有线程空闲时，便处理在任务队列中的任务。**
+
 ```java
 public static ExecutorService newFixedThreadPool(int nThreads){
     return new ThreadPoolExecutor(nThreads, nThreads,
@@ -313,10 +315,10 @@ public ThreadPoolExecutor(int corePoolSize,//线程池中的线程数量
 
 **==注:直接提交队列和普通的阻塞队列都有一个条件队列,但是此条件队列非彼条件队列.普通的阻塞队列是生产者将数据放入队列中,而消费者从队列中获取数据;而直接提交队列中的条件队列存储的是生产者线程,等待的是生产者线程而不是数据,你无法窥见这个队列里有什么信息(例如数据),而阻塞队列可以查看这些信息.就好比学生写意见放入意见信箱,信箱里的信件等校长来取,这是阻塞队列;而学生手里拿着信件,等校长有空了,直接交给他,这就是直接提交队列==**
 
-②有界的任务队列，功能由ArrayBlockingQueue提供： 
+②有界的任务队列，功能由**ArrayBlockingQueue(int)**提供： 
 使用ArrayBlockingQueue时，若有新的任务需要执行，如果线程池的实际线程数小于corePoolSize，则会有限创建新的线程(即不会加入任务队列)，若大于corePoolSize，则会将新任务加入条件队列。**==若任务队列已满，无法加入，则会在总线程数不大于maximumPoolSize的前提下，创建新的线程执行任务。若大于maximumPoolSize，则执行拒接策略。*可见,有界队列仅在当任务队列装满时,才有可能将线程数提升到corePoolSize以上*==** 
 ③无界的任务队列，功能由对LinkedBlockingQueue提供： 
-**与有界队列相比，除非系统资源耗尽，否则无界的任务队列==不会存在任务进入条件队列失败的情况。==**当有新的任务到来，系统的线程数小于corePoolSize时，线程池会创建新的线程执行任务，**但当线程数达到corePoolSize后，又有新的任务加入，==则任务会进入队列等待,不会继续增加线程数。==**所以使用LinkedBlockingQueue的ThreadPoolExecutor的maximumPoolSize并没有作用。若任务的创建速度和处理速度差异很大，无界队列就会快速增长，直到耗尽系统内存。 
+**与有界队列相比，除非系统资源耗尽，否则无界的任务队列==不会存在任务进入条件队列失败的情况。==**当有新的任务到来，系统的线程数小于corePoolSize时，线程池会创建新的线程执行任务，**但当线程数达到corePoolSize后，又有新的任务加入，==则任务会进入队列等待,不会继续增加线程数。所以使用LinkedBlockingQueue的ThreadPoolExecutor的maximumPoolSize并没有作用。==**若任务的创建速度和处理速度差异很大，无界队列就会快速增长，直到耗尽系统内存。 
 ④优先任务队列：功能由PriorityBlockingQueue提供： 
 它时一个特殊的无界队列，前面的ArrayBlockingQueue和LinkedBlockingQueue都是按照先进先出处理任务的。而PriorityBlockingQueue可以根据任务自身的优先级顺序先后执行。在确保系统性能的同时，也能有很好的质量保证。
 
@@ -998,7 +1000,7 @@ private void doReleaseShared() {
         
         if (h != null && h != tail) {
             int ws = h.waitStatus;
-            //再插入线程结点时,shouldParkAfterFailedAcquire(p, node)已经将前驱(即头结点)的waitStatus设置为了Signal
+            //⭐再插入线程结点时,shouldParkAfterFailedAcquire(p, node)已经将前驱(即头结点)的waitStatus设置为了Signal
             if (ws == Node.SIGNAL) {
                 //将结点状态从SIGNAL CAS设置为0
                 if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
@@ -1116,9 +1118,9 @@ for循环退出逻辑:
 
 整体思路:
 
-1. 多个线程调用`await()`,来到`doAcquireInterruptibly()`,若`countDown()`线程数还没有到达目标个数,该方法会将全部调用`await()`的线程包装成结点放入一个头结点为空节点的阻塞队列，同时将当前结点的前驱的status设置为SIGNAL。这样设置的含义其实是作为当前线程(SIGNAL结点的后继线程)是否已经执行到`shouldParkAfterFailedAcquire()`的标志,执行到该方法时才说明该线程将会被挂起,因为在他之前执行的`doAquireShared()`方法内逻辑是先将线程加入队列再检测`tryAcquireShared()`,如果此方法返回1则说明这条线程会和`countdown()`线程一样来到`doReleaseShared()`执行释放逻辑,这时候这条线程可能会直接退出,也可能会协助唤醒(注意CountDownLatch运作完毕时调用`await()`一般会直接返回false,而这个刚好和最后一个`countdown()`调用了才会出现这种状况)。
+1. 多个线程调用`await()`,来到`doAcquireSharedInterruptibly()`,若`countDown()`线程数还没有到达目标个数,该方法会将全部调用`await()`的线程包装成结点放入一个头结点为空节点的阻塞队列，同时将当前结点的前驱的status设置为SIGNAL。这样设置的含义其实是作为当前线程(SIGNAL结点的后继线程)是否已经执行到`shouldParkAfterFailedAcquire()`的标志,执行到该方法时才说明该线程将会被挂起,因为在他之前执行的`doAquireShared()`方法内逻辑是先将线程加入队列再检测`tryAcquireShared()`,如果此方法返回1则说明这条线程会和`countdown()`线程一样来到`doReleaseShared()`执行释放逻辑,这时候这条线程可能会直接退出,也可能会协助唤醒(注意CountDownLatch运作完毕时调用`await()`一般会直接返回false,而这个刚好和最后一个`countdown()`调用了才会出现这种状况)。
 2. 当多个线程调用`countDown()`使得state=0,此时方法调用就进入了`doReleaseShared()`，若空头结点的status为SIGNAL,则说明其后继结点的线程在阻塞,所以该方法将唤醒空头结点的后继结点,并将后继结点设置为头结点
-3. 当后继节点被唤醒后,在阻塞工作线程的`doAcquireInterruptibly()`方法体内,调用`setHeadAndPropagate(node, r)`进而调用`doReleaseShared()`继续检测当前头结点的status是否为SIGNAL,若是则将 ⭐`有线程的头结点的后继节点`唤醒。随着各个结点都变为头结点，也都将头结点的后继节点唤醒并将后继节点变为头结点，从而所有的节点都能够被唤醒。
+3. 当后继节点被唤醒后,在阻塞工作线程的`doAcquireSharedInterruptibly()`方法体内,调用`setHeadAndPropagate(node, r)`进而调用`doReleaseShared()`继续检测当前头结点的status是否为SIGNAL,若是则将 ⭐`有线程的头结点的后继节点`唤醒。随着各个结点都变为头结点，也都将头结点的后继节点唤醒并将后继节点变为头结点，从而所有的节点都能够被唤醒。
 
 #### Ⅳ、Condition
 
@@ -1247,7 +1249,7 @@ final long fullyRelease(Node node) {
 }
 ```
 
-###### ③isOnSyncQueue(node)判断当前结点是否已在阻塞队列
+###### ③⭐isOnSyncQueue(node)判断当前结点是否已在阻塞队列
 
 ```java
    final boolean isOnSyncQueue(Node node) {
@@ -1322,7 +1324,7 @@ final boolean transferAfterCancelledWait(Node node) {
 
 所以在`await()`过程中中断的机制则是,如果在`signal()`之前被中断,则`await()`方法抛出异常**(但线程此时仍然是获取了锁的)**;如果在`signal()`之后被中断,则只是重新对线程设置中断标志,并让线程继续执行.
 
-await总结:当线程调用`await()`方法后,首先`await()`会将当前线程包装成status为CONDITION的node加入condition条件队列队尾，其中若发现当前结点的前驱status不为CONDITION，则说明这条线程被取消了（不持有锁却调用`await()`），之后就会遍历整个队列清除这些被取消的结点。然后调用`release()`方法释放线程持有的锁(获取锁之后线程就不在阻塞队列中了,所以此时阻塞队列状态不变)(若此时当前线程不持有锁,则直接抛出异常并更改结点status为CANCLED,而此结点仍然在条件队列中)并从阻塞队列中唤醒一个线程从而让这个线程尝试争夺锁，然后就调用`LockSupport.park()`将当前线程挂起。当有其他线程调用`signal()`后,该条线程可能在阻塞队列中等待被唤醒,也可能在阻塞队列中直接被唤醒了(具体看`signal()`)。(这里不讲中断机制,中断还需看上面理解)由于此时node已经进入了阻塞队列便可以跳出让其挂起的while循环，随后则调用`acquireQueue()`尝试获取独占锁以继续进行,获取成功后便返回。
+await总结:当线程调用`await()`方法后,首先`await()`会将当前线程包装成status为CONDITION的node加入condition条件队列队尾，其中若发现当前结点的前驱status不为CONDITION，则说明这条线程被取消了（不持有锁却调用`await()`），之后就会遍历整个队列清除这些被取消的结点。然后调用`release()`方法释放线程持有的锁(获取锁之后线程就不在阻塞队列中了,所以此时阻塞队列状态不变)(若此时当前线程不持有锁,则直接抛出异常并更改结点status为CANCLED,而此结点仍然在条件队列中)并从阻塞队列中唤醒一个线程从而让这个线程尝试争夺锁，然后就调用`LockSupport.park()`将当前线程挂起。当有其他线程调用`signal()`后,该条线程可能在阻塞队列中等待被唤醒,也可能在阻塞队列中直接被唤醒了(具体看`signal()`)。**==（以线程是否进入阻塞队列为号）==**由于此时node已经进入了阻塞队列便可以跳出让其挂起的while循环，随后则调用`acquireQueued()`尝试获取独占锁以继续进行,获取成功后便返回。
 
 知识点：==中断机制==、执行顺序、唤醒时机
 

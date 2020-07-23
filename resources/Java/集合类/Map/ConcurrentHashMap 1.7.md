@@ -25,10 +25,11 @@ final Segment<K,V>[] segments;
         if (concurrencyLevel > MAX_SEGMENTS)
             concurrencyLevel = MAX_SEGMENTS;
 //---------------------------------------------------------------------------------------
-     //concurrencyLevel用于设置map中段的数目
+     //⭐⭐⭐concurrencyLevel用于设置map中段的数目
      //找到最接近concurrencyLevel的 2的n次幂ssize,⭐将ssize作为初始存放段的数组的容量
         int sshift = 0;
         int ssize = 1;
+     //sshift就是ssize所占的二进制位数
         while (ssize < concurrencyLevel) {
             ++sshift;
             ssize <<= 1;
@@ -142,6 +143,8 @@ public V put(K key, V value) {
 }
 ```
 
+**看清楚这个段下标是怎么求的:他是用hash的高n位(这个n指当前段数量所占的二进制位数)作为hashcode,来和段的数量求余**
+
 `Segement`作为一个锁管理着数个table,所以对table的具体操作也全都封装在了`Segement`对象中
 
 ```java
@@ -202,9 +205,9 @@ public V put(K key, V value) {
 
 `put()`过程逻辑总结:
 
-1. 通过key计算出hash,并**将hash的高位与段掩码相与求得目标段的数组下标**
+1. 通过key计算出hash,并**将hash的高位右移`segmentShitft`后与段掩码`segmentMask`相与求得目标段的数组下标**
 
-2. 自旋获得该段的锁
+2. 自旋获得该段的锁，自旋到最大尝试次数后就调用`lock()`进行阻塞
 
 3. **通过求余得到目标table的下标**,遍历目标table的链表,寻找是否有相同key的结点,若有则替换其value
 
@@ -329,6 +332,8 @@ private void rehash(HashEntry<K,V> node) {
 3. 先遍历一次table的链表,找出 lastRun结点,将以lastRun结点为头的链表直接赋值去新table中。**先遍历一遍的作用就在于此,==如果lastRun后面有较多的结点,那么这种直接赋值的转移方法更能够节省内存和时间==**
 4. 从旧table的链表头开始逐个**将结点插入到其相应的新table的链表头中**
 5. 最后插入新结点
+
+要记住的点:构造函数的并发度、segementMask和segmentShift各是什么，段和桶的下标怎么求，如何争抢锁，扩容的阈值和怎么扩容
 
 #### Ⅱ、查找
 

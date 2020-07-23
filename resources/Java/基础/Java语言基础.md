@@ -111,6 +111,8 @@ class Test{
 
 由于方法具有多态性,所以`say()`方法将在运行时动态绑定到它的实际类型`Zi`的方法中,毋庸置疑`test.say()`将输出`Zi`。而`test.i`呢?这个时候输出的值就是`Fu.i`也就是10了。所以**成员变量不具备多态性，通过引用变量来访问其包含的实例变量，系统总是试图访问它引用类型所定义的成员变量，而不是实际类型所定义的成员变量。**
 
+==**static和成员变量的原理是一样的！！！**==
+
 ### Ⅱ、this和super关键字的作用
 
 this的用途：
@@ -289,7 +291,7 @@ class Manager extends Employee
 
 #### 2、hashcode方法
 
-没什么好注意的。用`Object.hash()`重写就是了,其他去看`hashcode()与equals().md`。
+没什么好注意的。用`Objects.hash()`重写就是了,其他去看`hashcode()与equals().md`。
 
 #### 3、toString方法
 
@@ -374,7 +376,7 @@ public interface Comparable<T>
 
 ### Ⅸ、抽象类与接口的区别
 
-1. 接口中所有方法自动地属于public，抽象类则不一定
+1. 接口中所有方法自动地属于public abstract，抽象类则不一定
 2. Jdk1.8之前接口不能由方法实现，而抽象类中可以有抽象方法也可以有非抽象方法。
 3. 接口不能有实例域，接口中的域将被自动设为`public static final`。而抽象类则可以有实例域。
 4. 不能使用new实例化接口,接口并不能被实例化
@@ -570,7 +572,7 @@ Lambda表达式中可以访问外围方法或类中的变量，但是有一个�
 
 ### Ⅰ、InputStream
 
-`InputStream`是一个抽象类,它提供了两个最重要的抽象方法给子类实现——`read()`和`read(byte[]b)`。其中`read()`用于读取一个字节，并将读取指针向后移动一位，若已经读取完毕`read()`就会返回-1，通常将该方法放在`while`循环中;而`read(byte[]b)`则会将输入流中的数据复制到byte数组b中。
+`InputStream`是一个抽象类,它提供了两个最重要的抽象方法给子类实现——`read()`和`read(byte[]b)`。其中`read()`用于读取一个字节，并将读取指针向后移动一位，若已经读取完毕`read()`就会返回-1，通常将该方法放在`while`循环中;而 则会将输入流中的数据复制到byte数组b中。
 
 #### 1、`FileInputStream`
 
@@ -717,7 +719,7 @@ class Graph implements java.io.Serializable
 
 首先需要用`transient`标识`Point`成员,这样`ObjectOutPutStream`在序列化时就会跳过该成员。然后在`readObject()`和`writeObject()`定义序列化和反序列化逻辑,并在`readObject()`方法中根据序列化的信息创建对象。
 
-要注意的是，这两个方法并不是全盘负责序列化机制的，`ObjectOutPutStream.writeObject()`仍然会自动扫描域并序列化域的对象，只不过那些特殊的无法被序列化的域被标记上了`transient`后`ObjectOutPutStream`就会跳过它，这就让我们有机会自定义这些域的序列化。
+要注意的是，这两个方法并不是全盘负责序列化机制的，==`ObjectOutPutStream.writeObject()`仍然会自动扫描域并序列化域的对象，只不过那些特殊的无法被序列化的域被标记上了`transient`后`ObjectOutPutStream`就会跳过它，这就让我们有机会自定义这==些域的序列化。
 
 #### 2、`Externalizable`接口
 
@@ -745,6 +747,7 @@ public interface Externalizable extends java.io.Serializable {
 其二，对于实现了`Serializable`的单例,序列化机制可以创建一个单例对象。原因是在`ObjectInputStream`内本质上还是会通过反射创建单例对象。但是不同于直接反射，序列化机制为这种情况留了一条后路，也就是`readResolve()`方法。
 
 ```java
+//在单例中写这个方法
 protected Object readResolve()throws ObjectStreamException
 {
     //只需要在这里编写返回单例的代码即可
@@ -771,7 +774,7 @@ if ((clazz.getModifiers() & Modifier.ENUM) != 0)
 
 这里就会判断如果要实例化的类是`ENUM`修饰的,则直接抛出一个异常。反射攻击安全性也是由Java类库保证了。
 
-最后对于序列化攻击安全性，`ObjectOutPutStream`对枚举做了一个特殊处理。在序列化的时候仅仅是将枚举对象的name属性输出到流中，反序列化的时候则是通过`java.lang.Enum.valueOf()`方法来根据名字查找枚举对象，此时返回的就是在`enum`的静态常量,也就是单例(这些源码在`readEnum()`中)。同时，编译器是不允许任何对这种序列化机制的定制的，因此禁用了writeObject、readObject、readObjectNoData、writeReplace和readResolve等方法。至此我们就可以得知,为了枚举的序列化安全性,Java禁止了一切自定义序列化的方式（那是因为在`Enum`类中实现了这几个方法并将其标识为final）。
+最后对于序列化攻击安全性，`ObjectOutPutStream`对枚举做了一个特殊处理。==在序列化的时候仅仅是将枚举对象的name属性输出到流中，反序列化的时候则是通过`java.lang.Enum.valueOf()`方法来根据名字查找枚举对象，此时返回的就是在`enum`的静态常量,也就是单例(这些源码在`readEnum()`中)。同时，编译器是不允许任何对这种序列化机制的定制的，因此禁用了writeObject、readObject、readObjectNoData、writeReplace和readResolve等方法。==至此我们就可以得知,为了枚举的序列化安全性,Java禁止了一切自定义序列化的方式（那是因为在`Enum`类中实现了这几个方法并将其标识为final）。
 
 所以,枚举单例就是最安全也是最简单的单例写法。
 

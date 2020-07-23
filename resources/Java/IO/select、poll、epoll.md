@@ -1,5 +1,12 @@
 # `select`、`poll`和`epoll`的原理
 
+注意点：
+
+1. BIO是`recv()`时进程加入到sock对象等待队列中,而NIO是`select()`时进程就加入到了sock对象等待队列.
+
+2. 要清楚sock对象代表一个文件,也就是fd,清楚他和进程的关系就记得程序的代码是怎么写的了
+3. select耦合的原理可以这样记:看epoll_wait和epoll_ctl和epoll_create的作用和解决了什么就行了
+
 ###  一、BIO原理
 
 我们先从只监听**一个socket**开始讲起：
@@ -148,7 +155,7 @@ while(1){
 
    ==`rdlist` 指的是就绪队列，是一个双向链表结构，当网卡接收完数据后，中断处理程序就会将收到数据的socket引用（实际是将socket引用包装成了`epitem`对象,`rdlist`存放的是`epitem`）添加到`rdlist` 中。还有一个细节就是，程序可能随时调用 epoll_ctl 添加监视 socket，也可能随时删除。当删除时，若该 socket 已经存放在就绪列表中，它也应该被移除。==**`rdlist`的出现解决了`select`的问题2。**
 
-2. `rbr`
+2. `rbr(red black root)`
 
    既然 epoll 将“维护监视队列”和“进程阻塞”分离，也意味着需要有个数据结构来保存监视的 socket，至少要方便地添加和移除**(实际上监听 这个信息 是记录在sock对象的等待队列中的,他引用着一个`eventpoll`,但是调用`epoll_ctl(OP_DEL,fd)`的时候如何能直接就得知删除哪个sock对象呢?因为sock对象的等待队列引用的`eventpoll`,`eventpoll`并不知道哪个sock对象引用着它,所以才需要rbr创建一个`eventpoll`到sock对象的引用[看不懂先看后面])**，还要便于搜索，以避免重复添加。红黑树是一种自平衡二叉查找树，搜索、插入和删除时间复杂度都是O(log(N))，效率较好，epoll 使用了红黑树作为索引结构
 

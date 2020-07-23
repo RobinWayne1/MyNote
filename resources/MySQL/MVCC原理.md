@@ -14,7 +14,7 @@ InnoDB的MVCC主要依赖两部分数据记录事务信息：行记录隐藏列�
 
 <img src="E:\Typora\resources\Mysql\行隐藏列.png" style="zoom:48%;" />
 
-有主键的行记录会有两个隐藏列：`trx_id`和`db_roll_ptr`。
+ 	 
 
 * `trx_id`:表示最近一次对行进行增删改操作的事务ID
 * `db_roll_ptr`:该列存放着回滚段的指针,**InnoDB通过该指针寻找行的历史版本**。容易看出，行历史版本在回滚段中以链表形式存放。

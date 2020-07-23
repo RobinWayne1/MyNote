@@ -119,6 +119,7 @@ final Node<K,V> getNode(int hash, Object key) {
 static final int hash(Object key) {
         int h;
     	//调用由Object实现的方法得到hashcode,并且将该hashcode异或 hashcode无符号右移16位的数字(即hashcode高16位), 以当作HashMap的哈希值,这个异或的操作则称为扰动函数
+    //⭐⭐⭐如果key==null默认放在第0下标数组
         return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
     }
 ```
@@ -235,7 +236,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
         //若在链表或红黑树结点中找到了相同key
         if (e != null) { // existing mapping for key
             V oldValue = e.value;
-            //⭐注意看这个判断语句,若原结点值未null,不管onlyIfAbsent参数如何设置,如果此时结点值为null则一定会对结点值进行更新
+            //⭐注意看这个判断语句,若原结点值为null,不管onlyIfAbsent参数如何设置,如果此时结点值为null则一定会对结点值进行更新
             if (!onlyIfAbsent || oldValue == null)
                 //更新结点值
                 e.value = value;
