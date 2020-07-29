@@ -235,7 +235,7 @@ finishBeanFactoryInitialization(beanFactory)→
 			}
 		}
 
-		//在实例化完所有bean后,若有bean实现了SmartInitializingSingleton接口,则调用其afterSingletonsInstantiated()方法进行回调,如EventListenerMethodProcessor用来检测含有@EventListener的方法
+		//在实例化完所有bean后,若有bean实现了SmartInitializingSingleton接口,则调用其afterSingletonsInstantiated()方法进行回调,如EventListenerMethodProcessor用来检测含有@EventListener的方法 
 		for (String beanName : beanNames) {
 			Object singletonInstance = getSingleton(beanName);
 			if (singletonInstance instanceof SmartInitializingSingleton) {

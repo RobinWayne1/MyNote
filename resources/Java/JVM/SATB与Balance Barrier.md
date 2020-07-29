@@ -136,4 +136,4 @@ SATBMarkQueueSet只有在concurrent marking时才会被置为active。
 ） 
 ```
 
-CMS的incremental update设计使得它在remark阶段必须重新扫描所有线程栈和整个young gen作为root；G1的SATB设计在remark阶段则只需要扫描剩下的satb_mark_queue。 
+**CMS的incremental update设计使得它在remark阶段必须重新扫描所有线程栈和整个young gen作为root；G1的SATB设计在remark阶段则只需要扫描剩下的satb_mark_queue。** 

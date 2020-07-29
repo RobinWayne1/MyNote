@@ -278,7 +278,7 @@ foreach 标签主要用于构建 in 条件，可在 sql 中对集合进行迭代
 `close` ：后缀
 `separator `：分隔符，表示迭代时每个元素之间以什么分隔
 
-#### ③、`<choose>` 标签
+#### ③、`<choose><when>` 标签
 
 有时候我们并不想应用所有的条件，而只是想从多个选项中选择一个。MyBatis 提供了 choose 元素，按顺序判断 when 中的条件出否成立，如果有一个成立，则 choose 结束。当 choose 中所有 when
 的条件都不满则时，则执行 otherwise 中的 sql。类似于 Java 的 switch 语句，choose 为 switch，when 为 case，otherwise 则为 default。
@@ -307,7 +307,7 @@ if 是与(and)的关系，而 choose 是或（or）的关系。
 
 ### Ⅳ、格式化输出
 
-#### ①、`<where>` 标签
+#### ①、`<where><if>` 标签
 
 当 if 标签较多时，这样的组合可能会导致错误。 如下：
 
@@ -344,7 +344,7 @@ if 是与(and)的关系，而 choose 是或（or）的关系。
 
 #### ②、`<set>` 标签
 
-有使用 if 标签时，如果有一个参数为 null，都会导致错误。当在 update 语句中使用 if 标签时，如果最后的 if 没有执行，则或导致逗号多余错误。使用 set 标签可以将动态的配置 set关键字，和剔除追加到条件末尾的任何不相关的逗号。
+有使用 if 标签时，如果有一个参数为 null，都会导致错误。当在 update 语句中使用 if 标签时，如果最后的 if 没有执行，则或导致逗号多余错误。使用 set 标签可以将动态的配置 set关键字，和剔除追加到条件末尾的任何不相关的逗号
 ```xml
 <update id="updateStudent" parameterType="Object">
     UPDATE STUDENT
@@ -592,18 +592,18 @@ public class Subtitle implements Serializable
 * properties（属性）
 
   * settings（全局配置参数）
+    * setting
   * typeAliases（类型别名，用来替换namespace和各种type）
   * typeHandlers（类型处理器）
   * objectFactory（对象工厂，在经过`TypeHandler`转换完参数之后要创建结果对象时,若想在这个创建过程做一些动作,可以使用objectFactory）
   * plugins（插件）
-  * environments（环境集合属性对象）
-
+* environments（环境集合属性对象）
+  
   * environment（环境子属性对象）
-
-  * transactionManager（事务管理）
-
-  * dataSource（数据源）
-
+  
+    * transactionManager（事务管理）
+  
+    * dataSource（数据源）
   * mappers（映射器）
     * mapper（mapper文件路径）
     * package（dao接口路径）

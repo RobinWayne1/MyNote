@@ -714,7 +714,7 @@ public interface InstantiationAwareBeanPostProcessor extends BeanPostProcessor {
 
 `InstantiationAwareBeanPostProcessor`三个方法的用法和调用的时间地点:
 
-1. 如上所示,==`postProcessBeforeInstantiation()`在创建bean实例`createBeanInstance()`之前执行,如果返回了bean实例, 则会替代原来正常的bean生成流程，并且在调用`BeanPostProcessor`的`postProcessAfterInitialization()`后返回这个bean给容器管理。==我们可以在这个方法的实现中自己利用反射创建实例,并为每个bean实例创建动态代理。不过如果实现了这个方法且不返回null，那么Spring的属性注入功能也就失效了，因为基于注解注入的`AutowiredAnnotationBeanPostProcessor`也实现了`InstantiationAwareBeanPostProcessor`,且它注入的核心方法是`postProcessPropertyValues()`,在我们自己实现了`postProcessAfterInitialization()`后不可能调用这个方法。
+1. 如上所示,==`postProcessBeforeInstantiation()`在创建bean实例`createBeanInstance()`之前执行,如果返回了bean实例, 则会替代原来正常的bean生成流程，并且在调用`BeanPostProcessor`的`postProcessAfterInitialization()`后返回这个bean给容器管理。==我们可以在这个方法的实现中自己**利用参数的Class对象反射创建bean实例**,并为每个bean实例创建动态代理。不过如果实现了这个方法且不返回null，那么Spring的属性注入(无论注解或非注解)功能也就失效了，因为基于注解注入的`AutowiredAnnotationBeanPostProcessor`也实现了`InstantiationAwareBeanPostProcessor`,且它注入的核心方法是`postProcessPropertyValues()`,在我们自己实现了`postProcessAfterInitialization()`后不可能调用这个方法。
 
 在这里先不讲后两个方法的调用,因为它们的调用主要在`populateBean`中
 
@@ -1452,12 +1452,48 @@ public class ReplacementComputeValue implements org.springframework.beans.factor
 
 懒得手撸图了。下面说一下注意事项：
 
-1. `InstantiationAwareBeanPostProcessorAdapter`也是`BeanPostProcessor`
-2. 实现了`BeanPostProcessor`的Bean会在注册时调用`getBean()`提前初始化
-3. 由于`@PostConstruct`入口在`postProcessBeforeInitialization()`,所以他会先行执行与`afterPropertiesSet()`
-4. 而`@PreDestory`入口在`postProcessBeforeDestruction()`,所以标注的方法会在`destory()`之前执行
+1. 来到`refersh()`方法中,首先会调用`obtainFreshBeanFactory()`方法,解析xml配置文件并将其转化为`BeanDefinition`对象加入`BeanDefinitionMap`中以供后面实例化Bean时使用
+2. 然后会实例化实现了`BeanFactoryPostProcessor`接口的用户Bean,并调用其`postProcessBeanFactory(beanFactory)`,这个调用时机是在刚创建完基本的`BeanFactory`时,我们可以通过该接口给`BeanDefinitionMap`中自定义添加`BeanDefinition`
+3. 然后就开始`finishBeanFactoryInitialization()`,遍历实例化所有的非延迟加载Bean.来到`doGetBean()`,首先先检查要实例化的Bean是否能被父容器加载,若可以则直接返回父容器中的Bean实例,若没有则继续执行
+4. 然后检查该Bean是否有dependsOn的Bean,如果有则先调用其`getBean()`方法
+5. 之后则正式开始Bean的创建`createBean()`。在反射实例化Bean之前，会先对那些实现了`InstantiationAwareBeanPostProcessor`的Bean调用其实现方法`postProcessBeforeInstantiation(beanClass，beanName)`。这个方法可以返回一个Bean，能够想到的逻辑就是在方法中反射实例化Bean并对他进行动态代理，然后返回。返回之后，Spring会对这个Bean应用`BeanPostProcessor`的后置后处理方法,之后就直接返回,不进行后续的操作了。
+6. 然后就是Bean的反射实例化。
+7. 之后就来到了`populateBean()`方法中,在执行具体的注入逻辑之前,又会调用一次实现了`InstantiationAwareBeanPostProcessor`的Bean的`postProcessAfterInstantiation(beanClass，beanName)`方法,如果所有该方法都返回true,才去进行后面的属性注入逻辑,否则不执行。进行完基于配置的注入之后，就又会调用实现了`InstantiationAwareBeanPostProcessor`的Bean的`postProcessPropertyValues()`方法了,该方法主要就是对属性注入的补充,如`@Autowired`的实现类`AutowiredAnnotationBeanPostProcessor`就实现了这个方法以提供注解注入的逻辑
+8. 现在已经注入完Bean了，然后开始初始化Bean的流程。首先调用Bean中的`Aware`实现方法,然后调用前置后处理器,此时`@PostConstruct`就会生效因为他的实现在前置后处理器中。然后调用该Bean的init-method，最后调用后置后处理器返回一个可使用的Bean
+9. 在关闭容器要销毁Bean时，首先调用`@PreDestory`方法,然后调用destory-method最终结束.
 
-## 四、Spring bean的作用域
+##  四、Spring Bean的三种创建方式
+
+### 1. 使用**默认(无参)构造函数创建**
+
+在spring的配置文件中使用bean 标签，配以id 和 class 属性之后，且没有其他属性和标签时，采用的就是默认构造函数创建bean对象，此时如果类中没有默认构造函数，则对象无法创建。
+
+```xml
+<bean id="accountService" class="com.jz.service.impl.AccountServiceImpl"></bean>
+```
+
+### 2. 使用普通工厂中的方法创建对象（使用某个类中的方法创建对象，并存入spring容器）
+
+InstanceFactory类可能是存在于jar包中，无法通过修改源码的方式来提供默认构造函数
+
+```xml
+<bean id="instanceFactory" class="com.jz.factory.InstanceFactory"></bean>
+<bean id="accountService" factory-bean="instanceFactory" factory-method="getAccountService"></bean>
+```
+
+### 3. 使用工厂中的静态方法创建对象（使用某个类中的静态方法创建对象，并存入spring容器）
+
+StaticFactory类可能是存在于jar包中，无法通过修改源码的方式来提供默认构造函数
+
+```xml
+<bean id="accountService" class="com.jz.factory.StaticFactory" factory-method="getAccountService"></bean>
+```
+
+### 4.实现`FactoryBean`接口创建Bean
+
+看上面的`getObject()`
+
+## 五、Spring bean的作用域
 
 Spring中Bean有**五种scope**，**singleton** **prototype** **request** **session** **globalSession**  
 
@@ -1467,7 +1503,7 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 4. session，在每一次**http****请求**时会创建一个实例，该实例仅在当前**http** **session**有效 
 5. globalSession，全局Session，供**不同的portlet**共享，portlet好像是类似于servlet的Web组件
 
-## 五、Spring事务
+## 六、Spring事务
 
 ### Ⅰ、事务隔离级别
 
@@ -1481,7 +1517,7 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 
 ![](E:\Typora\MyNote\resources\Spring\回滚机制.png)
 
-## 六、依赖注入歧义性解决
+## 七、依赖注入歧义性解决
 
 ### Ⅰ、`@autowired`
 
@@ -1502,6 +1538,21 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 ### Ⅱ、`@Resources`
 
 具体的注入方式的用法和`@autoweired`一致,只不过`@Resources`是先进行名称注入后进行类型注入,且他是JDK的注解而不是Spring的
+
+### Ⅲ、两种注入方式
+
+构造器注入和setter注入，或者还可以说一种基于注解注入
+
+## 八、IOC、DI和AOP概念描述
+
+IOC(Inversion of Control)控制反转,控制反转不是一种新的技术而是一种设计思想,控制反转指的是创建对象的控制权反转了,以前是创建对象的主动权和创建时机是由自己把控的,该对象的依赖对象也需要手动去创建、注入,现在这个控制权交给了Spring容器,由Spring容器去管理,去创建对象,同时对象之间的依赖关系也没有了,他们都依赖于Spring容器,通过Spring容器去建立他们之间的关系;
+
+组件之间的依赖关系由容器在运行期间决定,即由容器动态的将某个依赖关系注入到组件中;依赖注入的目的不在于为软件系统提供更多的功能,它的主要目的在于提升组件重用的频度,并为软件搭建一个灵活,可扩展的平台,通过依赖注入,我们只需要简单的配置,不需要任何代码就可以指定目标的资源,完成自身的业务逻辑,不需要关心具体的资源来自何处有谁实现;
+
+我们知道，OOP引进"抽象"、"封装"、"继承"、"多态"等概念,对万事万物进行抽象和封装，来建立一种对象的层次结构，它强调了一种完整事务的自上而下的关系。但是具体细粒度到每个事物内部的情况，OOP就显得无能为力了。比如日志功能。日志代码往往水平地散布在所有对象层次当中，却与它所散布到的对象的核心功能毫无关系。对于其他很多类似功能，如事务管理、权限控制等也是如此。这导致了大量代码的重复，而不利于各个模块的重用。  而AOP技术则恰恰相反，它利用一种称为"横切"的技术，能够剖解开封装的对象内部，并将那些影响了多个类并且与具体业务无关的公共行为 封装成一个独立的模块（称为切面）。更重要的是，它又能以巧夺天功的妙手将这些剖开的切面复原，不留痕迹的融入核心业务逻辑中。这样，对于日后横切功能的编辑和重用都能够带来极大
+的方便。
+
+
 
 
 > 参考资料

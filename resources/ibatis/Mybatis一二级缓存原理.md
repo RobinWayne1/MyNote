@@ -365,7 +365,7 @@ public int update(MappedStatement ms, Object parameter) throws SQLException {
 
 小结:
 
-1. 在Spring-Mybatis整合中,由于不在Spring事务中时每次调用Mapper方法都会创建一个新的`SqlSession`对象,而由于`BaseExecutor`中的`localCache`是对象持有的,所以不在Spring事务中的Mapper调用相当于每次调用都创建一个新缓存,也就是失效状态。而在Spring事务中的Mapper方法调用会公用一个`SqlSession`,所以也就能使用缓存,**也就是以事务为单位的缓存**。
+1. 生命周期:在Spring-Mybatis整合中,由于不在Spring事务中时每次调用Mapper方法都会创建一个新的`SqlSession`对象,而由于`BaseExecutor`中的`localCache`是`SqlSession`对象持有的,所以不在Spring事务中的Mapper调用相当于每次调用都创建一个新缓存,也就是失效状态。而在Spring事务中的Mapper方法调用会公用一个`SqlSession`,所以也就能使用缓存,**也就是以事务为单位的缓存**。
 
 2. 由上面的源码解析就可得出的结论，`<setting name="localCacheValue" value="statement">`即可完全禁用一级缓存,因为每次Mapper调用返回结果时都会清空缓存
 
@@ -618,7 +618,7 @@ public Object getObject(Object key) {
 
 小结：
 
-1. 二级缓存的存储粒度是每个命名空间共用一个缓存对象，相比于一级缓存二级缓存的粒度更小。但二级缓存是一个全局缓存，所有`SqlSession`都可以使用;而一级缓存只能在相同`SqlSession`下使用。
+1. 生命周期:二级缓存的存储粒度是每个命名空间共用一个缓存对象，相比于一级缓存二级缓存的粒度更小。但二级缓存是一个全局缓存，所有`SqlSession`都可以使用,因为该缓存是存放在`Configuration`的`MappedStatement`中的;而一级缓存只能在相同`SqlSession`下使用,因为他是`BaseExecutor`持有的。
 2. 二级缓存可以通过不同的装饰者实现对Cache的管理，如FIFO或者LRU，比一级缓存的可控性更强
 3. 在二级缓存中,只有事务提交后才会将事务内`select`的数据存入缓存。而一级缓存中，数据将不断地随着`select`的执行成功而写入缓存。
 4. 两者的`update()`、`commit()`、`rollback()`都默认刷新整个缓存,不过二级缓存还能够通过在Statement中使用`<flushCache>`配置以强制`update()`不刷新缓存。

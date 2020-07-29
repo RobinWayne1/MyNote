@@ -1,4 +1,4 @@
-# LinkedList
+# LinkedList和vector
 
 实现了DeQue接口,底层用双向链表实现List逻辑。由于实现了DeQue接口，LinkedList还可以用实现的`getFirst()`和`addLast()`使其当作队列使用
 
@@ -15,4 +15,11 @@ LinkedList与ArrayList的区别：
 
 4. 双向链表与单链表
 
-   
+
+
+
+ArrayList和Vector的区别
+
+1. Vector与ArrayList一样，也是通过数组实现的，不同的是它支持线程的同步，即某一时刻只有一个线程能够写Vector，避免多线程同时写而引起的不一致性，但实现同步需要很高的花费，因此，访问它比访问ArrayList慢。
+2. 如果集合中的元素的数目大于目前集合数组的长度时，vector增长率为目前数组长度的100%,而arraylist增长率为目前数组长度
+   的50%.如过在集合中使用数据量比较大的数据，用vector有一定的优势。

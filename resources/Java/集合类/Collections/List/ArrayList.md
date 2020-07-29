@@ -1,7 +1,7 @@
 # ArrayList
 
 ```java
-//默认容量,使用无参构造器创建对象时使用
+//⭐默认容量,使用无参构造器创建对象时使用，起始容量是10
 private static final int DEFAULT_CAPACITY = 10;
 
 //当构造器中指定容量为0时,则会将此数组赋值给elementData
