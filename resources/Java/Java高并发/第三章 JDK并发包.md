@@ -54,13 +54,19 @@
 
 #### 5.倒计数器
 
+```java
+public CountDownLatch(int count)
+```
+
 `countDownLatch.countDown()`和`countDownLatch.await()`是两个相对应的方法,前者用作计数,后者用作阻塞线程直到计数完毕(可中断)。用法例子:多个线程的执行体的开头调用`countDownLatch.await()`,等待其他线程中的`countDownLatch.counDown()`使得计数器到达0后,所有调用`countDownLatch.await()`的线程都开始重新执行。==**⭐注:在CountDownLatch对象的state为0时,此时再调用`countDownLatch.await()`则会直接通过不阻塞.**==
 
 ==CountDownLatch强调的是一个或多个线程，等待其他一组线程完成操作，再继续执行。==
 
 #### 6.循环栅栏
 
-`public CyclicBarrier(int parties,Runable barrierAction)`
+```java
+ public CyclicBarrier(int parties,Runable barrierActiona)
+```
 
 parties即是计数总数,**barrierAction就是当有parties个线程调用`CyclicBarrier.await()`==(有一个线程调用此方法时则完成一次计数 计数+1)==方法后，在释放 调用`CyclicBarrier.await()`的线程 之前所执行的代码。**而之后则会释放阻塞线程让其继续执行。
 
