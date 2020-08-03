@@ -344,7 +344,7 @@ jdk内置拒绝策略如下:
 
 #### 4、扩展线程池
 
-ThreadPoolExecutor是一个可以扩展的线程池,它提供了beforeExecute(),afterExecute()和terminated()三个接口用来对线程池进行控制,前两个方法将会在执行任务的线程中调用,可以在创建线程池时重写这几个方法.
+ThreadPoolExecutor是一个可以扩展的线程池,它提供了`beforeExecute()`,`afterExecute()`和`terminated()`三个接口用来对线程池进行控制,前两个方法分别会在线程执行任务前和执行任务后调用,最后一个方法将会在线程池终结时调用。可以在创建线程池时重写这几个方法.
 
 #### 5、分而治之:Fork/Join框架
 
