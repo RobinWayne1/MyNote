@@ -132,7 +132,7 @@ public V put(K key, V value) {
     int hash = hash(key);
     // ⭐ 根据 hash 值找到 Segment 数组中的位置 j
     //    hash 是 32 位，无符号右移 segmentShift(28) 位，剩下高 4 位，
-    //    然后和 segmentMask(15) 做一次与操作，也就是说 j 是 hash 值的高 4 位，也就是Segment数组(segements)的下标
+    //    然后和 segmentMask(15) 做一次与操作，也就是说 j 是 hash 值的高 4 位，也就是Segment数组(segements)的下标(前4位是会变的,也就是说segmentShift会变的,面试的时候不要说4这个数字)
     int j = (hash >>> segmentShift) & segmentMask;
     //获取相应下标的segment
     if ((s = (Segment<K,V>)UNSAFE.getObject          // nonvolatile; recheck

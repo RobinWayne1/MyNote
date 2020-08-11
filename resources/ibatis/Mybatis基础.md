@@ -10,6 +10,8 @@
         ResultSet s=null;
         try
         {
+            //在Driver的static块中将Driver本身注册进了DriverManager中
+            // Class.forName("com.mysql.jdbc.Driver")
              conn = DriverManager.
                     getConnection("jdbc:mysql://localhost:3306/subtitle_search?Unicode=true&characterEncoding=UTF-8", "root", "888888");
 
@@ -342,7 +344,7 @@ if 是与(and)的关系，而 choose 是或（or）的关系。
 
 ```
 
-#### ②、`<set>` 标签
+#### ②、`<set><if>` 标签
 
 有使用 if 标签时，如果有一个参数为 null，都会导致错误。当在 update 语句中使用 if 标签时，如果最后的 if 没有执行，则或导致逗号多余错误。使用 set 标签可以将动态的配置 set关键字，和剔除追加到条件末尾的任何不相关的逗号
 ```xml

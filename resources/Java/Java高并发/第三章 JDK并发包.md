@@ -170,6 +170,8 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 
 ### 二、线程池
 
+使用线程池的好处：使用线程池的好处是**减少在创建和销毁线程上所花的时间以及系统资源的开销**，解决资源不足的问题。如果不使用线程池，**有可能造成系统创建大量同类线程而导致消耗完内存**或者“过度切换”的问题。
+
 ![在这里插入图片描述](http://www.pianshen.com/images/108/265844bed9e9eeb918b14ff2c94d130c.png)
 
 - ==**Executor：一个接口，其定义了一个接收Runnable对象的方法execute，其方法签名为execute(Runnable command)**==
@@ -324,7 +326,7 @@ public ThreadPoolExecutor(int corePoolSize,//线程池中的线程数量
 ②有界的任务队列，功能由**ArrayBlockingQueue(int)**提供： 
 使用ArrayBlockingQueue时，若有新的任务需要执行，如果线程池的实际线程数小于corePoolSize，则会有限创建新的线程(即不会加入任务队列)，若大于corePoolSize，则会将新任务加入条件队列。**==若任务队列已满，无法加入，则会在总线程数不大于maximumPoolSize的前提下，创建新的线程执行任务。若大于maximumPoolSize，则执行拒接策略。*可见,有界队列仅在当任务队列装满时,才有可能将线程数提升到corePoolSize以上*==** 
 ③无界的任务队列，功能由对LinkedBlockingQueue提供： 
-**与有界队列相比，除非系统资源耗尽，否则无界的任务队列==不会存在任务进入条件队列失败的情况。==**当有新的任务到来，系统的线程数小于corePoolSize时，线程池会创建新的线程执行任务，**但当线程数达到corePoolSize后，又有新的任务加入，==则任务会进入队列等待,不会继续增加线程数。所以使用LinkedBlockingQueue的ThreadPoolExecutor的maximumPoolSize并没有作用。==**若任务的创建速度和处理速度差异很大，无界队列就会快速增长，直到耗尽系统内存。 
+**与有界队列相比，除非系统资源耗尽，否则无界的任务队列==不会存在任务进入条件队列失败的情况。==**当有新的任务到来，系统的线程数小于corePoolSize时，线程池会创建新的线程执行任务，**但当线程数达到corePoolSize后，又有新的任务加入，==则任务会进入队列等待,不会继续增加线程数。所以使用LinkedBlockingQueue的ThreadPoolExecutor的maximumPoolSize并没有作用。（有用的我靠，可以指定容量的）==**若任务的创建速度和处理速度差异很大，无界队列就会快速增长，直到耗尽系统内存。 
 ④优先任务队列：功能由PriorityBlockingQueue提供： 
 它时一个特殊的无界队列，前面的ArrayBlockingQueue和LinkedBlockingQueue都是按照先进先出处理任务的。而PriorityBlockingQueue可以根据任务自身的优先级顺序先后执行。在确保系统性能的同时，也能有很好的质量保证。
 

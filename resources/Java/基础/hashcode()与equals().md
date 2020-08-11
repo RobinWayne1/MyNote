@@ -6,6 +6,7 @@
 2. 如果两个`Object`调用`equals()`返回true,则这两个`Object`调用`hashcode()`一定会返回相同的值
 3. 而若两个`Object`调用`hashcode()`返回相同的值,则虚拟机并不保证两个`Object`调用`equals()`会返回`true`,`hashcode`相同只能说明这两个对象将会被放入同一个桶中
 4. `equals()`方法要与`hashcode()`一起重写,不能只重写其中某个方法
+5. 注意hashcode只会在对象产生时生成一次，之后不会再改变
 
 ### 二、`Object`的`equals()`
 

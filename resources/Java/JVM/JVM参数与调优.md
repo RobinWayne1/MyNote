@@ -14,6 +14,7 @@
 | ⭐-XX:PretenureSizeThreshold | 设置大对象进入老年代的对象占用阈值。注意tenure是维持的意思。 |
 | ⭐-XX:MaxTenuringThreshold   | 晋升到老年代的对象年龄,默认15                                |
 | -XX:HandlerPromotionFailure | 是否允许分配担保失败                                         |
+| +HeapDumpOnOutOfMemoryError | 当发生OOM时自动dump出堆信息。dump堆内存信息后，需要对dump出的文件进行分析，从而找到OOM的原因。 |
 
 ### 一、简单GC调优
 

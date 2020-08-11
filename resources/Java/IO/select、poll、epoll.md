@@ -7,7 +7,7 @@
 2. 要清楚sock对象代表一个文件,也就是fd,清楚他和进程的关系就记得程序的代码是怎么写的了
 3. select耦合的原理可以这样记:看epoll_wait和epoll_ctl和epoll_create的作用和解决了什么就行了
 
-###  一、BIO原理
+###  一、单个Sock的监听
 
 我们先从只监听**一个socket**开始讲起：
 

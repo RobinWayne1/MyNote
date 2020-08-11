@@ -1,5 +1,9 @@
 # HashMap
 
+HashMap采用的是拉链法（链地址法）,还有一种方法是开放地址法,包括线性探测法和二次探测法。
+
+先讲底层数据结构，再将构造器的两个指标，再将`put()`的具体原理。
+
 ### 一、静态常量
 
 ```java
@@ -41,7 +45,7 @@ transient int size;
 
 //Iterator相关,其中对HashMap的修改操作会更改modCount.若正在用Iterator遍历HashMap的Set时修改了HashMap,迭代器的next()方法将会抛出ConcurrenModificationException
 transient int modCount;
-
+ 
 /**
  * The next size value at which to resize (capacity * load factor).
  *
