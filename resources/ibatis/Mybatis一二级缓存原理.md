@@ -377,7 +377,7 @@ public int update(MappedStatement ms, Object parameter) throws SQLException {
 
 5. MyBatis的一级缓存最大范围是`SqlSession`内部，有多个`SqlSession`或者分布式的环境下，数据库写操作会引起脏数据。
 
-## 三、二级缓存
+## 三、二级缓存（这两个缓存注意讲什么时候插入什么时候刷新）
 
 ### Ⅰ、二级缓存使用配置
 

@@ -36,6 +36,17 @@ Java的NIO、AIO的主要功能其实都是依赖于操作系统内核的一些�
 
 BIO即同步阻塞IO，==由**一条线程**来监听客户端的连接建立请求,当连接建立后,服务器端需要创建一个新线程(线程池)处理客户端发送过来的数据,且客户端数据的读取或写入都必须阻塞在这个线程中==，即**⭐服务端需要在这个线程中等待数据从客户端传送到服务器端**，才能开始读操作。（连接的建立只需要调用`socket.connect()`,此时服务器就会创建新线程,而数据真正发送则需要在客户端调用`socket.write()`中，此时服务器调用的`input.readLine()`就会发生阻塞）
 
+```java
+        ServerSocket serverSocket=new ServerSocket();
+        serverSocket.bind(new InetSocketAddress(8080));
+        Socket client=serverSocket.accept();
+        //之后正常操作应该是开启新线程处理数据
+        BufferedReader input = new BufferedReader(new InputStreamReader(client.getInputStream()));
+         input.readLine();//这里要注意和客户端输出流的写方法对应,否则会抛 EOFException
+```
+
+
+
 缺点:
 
 * 每当有新连接就创建线程,当连接数过多时,不断创建新线程会导致OOM;就算是使用线程池,等待队列也有一个界限,到达这个界限之后就会执行拒绝策略丢弃请求==(最主要关注的点还是有新连接就创建新线程,使得在新线程内有大概率大部分时间都在等待网络IO)==
@@ -449,7 +460,7 @@ class Attachment {
 
 #### ==Ⅱ、AIO和NIO的区别==
 
-* ①AIO回调基于通知，回调是AIO框架内部自动调用；而NIO的数据处理逻辑 则需要用户代码手动调用
+* ①AIO回调基于通知，回调是AIO框架内部自动调用(==**注意是通过Linux信号来进行的!!**==)；而NIO的数据处理逻辑 则需要用户代码手动调用
 * <img src="E:\Typora\resources\Java\IO\LinuxNIO.png" style="zoom:33%;" /><img src="E:\Typora\resources\Java\IO\LinuxAIO.png" style="zoom:33%;" />②**NIO中,只要网络IO完成,内核就通知Java进程数据可读，`selector.select()`此时也就不再阻塞。当用户要读取数据时(`socketChannel.read(buffer)`)，NIO框架内部阻塞进行系统调用使得数据从内核空间复制到用户空间，并将数据读入`ByteBuffer`供用户代码使用。而在AIO中，网络IO完成后，==*内核还负责将数据从内核空间复制到了用户空间，这一步完成之后内核再通知Java进程数据可读,这就使得AIO比NIO少了一次系统调用阻塞.上面两个LinuxIO模型就很清楚的说明了这个区别*==**
 
 ### 四、非阻塞IO（无法定义同步还是异步，因为它两不像）

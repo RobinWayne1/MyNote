@@ -79,9 +79,9 @@
 
 #### 3、char类型
 
-| 类型 | 存储需求                         |
-| ---- | -------------------------------- |
-| char | 1字节~2字节，根据Unicode字符判断 |
+| 类型 | 存储需求                   |
+| ---- | -------------------------- |
+| char | 2字节，根据Unicode字符判断 |
 
 #### 4、boolean类型
 
@@ -406,7 +406,7 @@ class Employee implements Cloneable
 
 顺便说一下浅拷贝和深拷贝的定义：
 
-* 浅拷贝：对基本数据类型进行值传递，对引用数据类型进行引用传递般的拷贝
+* 浅拷贝：对基本数据类型进行值传递，对引用数据类型进行地址的拷贝
 * 深拷贝：对基本数据类型进行值传递，对引用数据类型，创建一个新的对象，并复制其内容
 
 ### Ⅶ、抽象类
@@ -455,14 +455,11 @@ public interface Comparable<T>
 ### Ⅸ、抽象类与接口的区别
 
 1. 接口中所有方法自动地属于public abstract，抽象类则不一定
-
 2. Jdk1.8之前接口不能由方法实现，而抽象类中可以有抽象方法也可以有非抽象方法。
-
 3. 接口不能有实例域，接口中的域将被自动设为`public static final`。而抽象类则可以有实例域。
-
 4. 不能使用new实例化接口,接口并不能被实例化
-
 5. 一个类只能继承一个抽象类，但可以实现多个接口。接口本身可以用extends扩展。
+6. 抽象类继承自Object类，而interface不继承自Object类
 
 
 ### Ⅹ、方法参数
@@ -594,7 +591,7 @@ Arrays.sort(a, new Comparator<String>()
 
 ### Ⅲ、方法引用
 
-在某些情况下，要实现的抽象方法需要调用某个现成的方法（也就是说Lambda表达式的实现只做一个传递参数值的作用），这种情况就要使用方法引用。
+在某些情况下，要实现的抽象方法需要调用某个现成的方法**（也就是说Lambda表达式的实现只做一个传递参数值的作用）**，这种情况就要使用方法引用。
 
 方法引用要用`::`操作符分割方法名与对象或类名。主要有三种情况：
 
@@ -709,7 +706,7 @@ Reader是处理字符流的一个接口，它同样提供了`read()`和`read(cha
 
 以字符流的形式读取文件。下面来讨论一下它的原理。
 
-`FileReader`继承自`InputStreamReader`,而`InputStreamReader`的大致运行机制其实还是通过`InputStream`读入字节,只不过在读入字节之后将字节根据选择的解码方式将字节流转换为字符流。而默认的`InputStreamReader`的解码方式则是utf-8，如果想要转换该解码方式则要用自定义的`InputStreamReader`来包装`FileReader`。
+`FileReader`继承自`InputStreamReader`,而`InputStreamReader`的大致运行机制其实还是通过`InputStream`读入字节,只不过在读入字节之后将字节根据选择的解码方式将字节流转换为字符流。而默认的`InputStreamReader`的解码方式则是utf-8，如果想要转换该解码方式则要用自定义的`InputStreamReader`来包装新建的`FileInputStream`，从而使用`InputStreamReader`来读取数据。
 
 #### 2、`InputStreamReader`
 
@@ -719,7 +716,7 @@ Reader是处理字符流的一个接口，它同样提供了`read()`和`read(cha
  public InputStreamReader(InputStream in, Charset cs)
 ```
 
-其Charset有以下几种:`StandardCharsets.UTF_8`、`StandardCharsets.ISO_8859_1`、`StandardCharsets.UTF_16BE`、`StandardCharsets.US_ASCII`、`StandardCharsets.UTF_16LE``StandardCharsets.UTF_16`。
+其Charset有以下几种:`StandardCharsets.UTF_8`、`StandardCharsets.ISO_8859_1`、`StandardCharsets.UTF_16BE`、`StandardCharsets.US_ASCII`、`StandardCharsets.UTF_16LE`、`StandardCharsets.UTF_16`。
 
 #### 3、`BufferedReader`
 

@@ -30,7 +30,7 @@ public class Dao {
 public class DaoProxy implements MethodInterceptor {
 
     /*
-    	Object表示要进行增强的对象
+    	Object表示代理对象
 		Method表示拦截的方法
 		Object[]数组表示参数列表，基本数据类型需要传入其包装类型，如int-->Integer、long-Long、double-->Double
 		MethodProxy表示对方法的代理，invokeSuper方法表示对被代理对象方法的调用(这种调用是Cglib经过优化的调用,并不是反射调用)
@@ -54,6 +54,7 @@ public class DaoAnotherProxy implements MethodInterceptor {
     public Object intercept(Object object, Method method, Object[] args, MethodProxy proxy) throws Throwable {
         
         System.out.println("StartTime=[" + System.currentTimeMillis() + "]");
+        //⭐这里写错了，这样调用将会无限递归，object是代理类来的，和JDK动态代理一致
         method.invoke(object, args);
         System.out.println("EndTime=[" + System.currentTimeMillis() + "]");
         return object;
@@ -961,15 +962,15 @@ public class Dao$$EnhancerByCGLIB$$27019bc7 extends Dao implements Factory {
 
    这样就可以基于接口代理了
 
-4. JDK动态代理的被代理类的内部调用不会触发`invoke()`方法(因为被代理类和代理类是两个完全不同的对象),而Cglib动态代理被代理类的内部调用将会触发`intercept()`(因为代理类是被代理类的子类,所以方法会动态分派到子类来执行)
+4. **（先讲底层类的分派原理）JDK动态代理的被代理类的内部调用不会触发`invoke()`方法(因为被代理类和代理类是两个完全不同的对象),而Cglib动态代理被代理类的内部调用将会触发`intercept()`(因为代理类是被代理类的子类,所以方法会动态分派到子类来执行)**
 
-5. Cglib动态代理在生成代理类后还能重新设定`Callback`（只能指定原来数量的callb  ack）,而JDK动态代理的代理类一旦生成就无法再指定`InvokecationHandler`了
+5. Cglib动态代理在生成代理类后还能重新设定`Callback`（只能指定原来数量的callback）,而JDK动态代理的代理类一旦生成就无法再指定`InvokecationHandler`了
 
 源码上的区别:
 
 1. 两者都是二级映射缓存,只不过JDK动态代理是`(ClassLoader包装对象→(interface接口包装对象→Class包装对象))`,而Cglib动态代理是`(ClassLoader→(由各类信息生成的EnhancerKey→Class包装对象))`
 
-2. JDK动态代理中,`InvocationHandler`实现类只能通过反射调用原方法;而Cglib动态代理不仅可以通过反射,也可以使用`MethodProxy.invokeSupr()`来调用原方法。这个调用的原理就是Cglib动态代理同时生成了一个`FastClass`实现类,该实现类的`invoke()`实现如下
+2. **JDK动态代理中,`InvocationHandler`实现类只能通过反射调用原方法;而Cglib动态代理不仅可以通过反射,也可以使用`MethodProxy.invokeSupr()`来调用原方法。这个调用的原理就是Cglib动态代理同时生成了一个`FastClass`实现类,该实现类的`invoke()`实现如下**
 
    ```java
    //Dao$$EnhancerByCGLIB$$27019bc7$$FastClassByCGLIB$$e95c9f53.java
