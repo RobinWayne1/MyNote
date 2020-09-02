@@ -12,7 +12,7 @@ InnoDB的MVCC主要依赖两部分数据记录事务信息：行记录隐藏列�
 
 #### Ⅰ、行记录隐藏列
 
-<img src="E:\Typora\resources\Mysql\行隐藏列.png" style="zoom:48%;" />
+<img src="E:\Typora\MyNote\resources\Mysql\行隐藏列.png" style="zoom:48%;" />
 
  	 
 
@@ -62,7 +62,7 @@ struct read_view_t{
 
 ##### ③、主要成员解析
 
-* `low_limit_id`和`up_limit_id`:这两个成员记录的是 当前事务/sql 开始执行前的一刻 活跃(正在执行)的事务ID的**界限**。（==由于给事务分配的ID是递增的,其大小决定了事务开启的先后顺序,所以有界限这个概念）==`low_limit_id`记录的是活跃的事务ID的最大值（不包括最新开始执行的自己这个事务），`up_limit_id`记录的是活跃的事务ID的最小值。
+* `low_limit_id`和`up_limit_id`:这两个成员记录的是 当前事务/sql 开始执行前的一刻 活跃(正在执行)的事务ID的**界限**。（==由于给事务分配的ID是递增的,其大小决定了事务开启的先后顺序,所以有界限这个概念）==`low_limit_id`记录的是活跃的事务ID的最大值（不包括最新开始执行的自己这个事务），`up_limit_id`记录的是活跃的事务ID的最小值。大于`low_limit_id`的事务ID是在当前事务开始运行之后运行的,而小于`up_limit_id`的事务ID是已经提交了的事务ID，而小于`low_limit_id`大于`up_limit_id`的事务ID则代表在当前事务运行前开始运行的并且在生成`read view`那一刻还在运行的事务ID.
 * `trx_ids`:而`trx_ids`记录的是**所有**当前事务/sql 开始执行前的一刻正在活跃的事务ID(注意`low_limit_id`和`up_limit_id`只记录了最大和最小两个事务ID,那两个成员只是为了InnoDB方便判断是否可见,看下面就懂了)
 
 ### ==三、可重读隔离级别的可见性判断流程==
