@@ -2,7 +2,7 @@
 
 ###  Reactor
 
-<img src="E:\Typora\resources\Java\IO\Recator.png" style="zoom:67%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Recator.png" style="zoom:67%;" />
 
 读操作为例**(要注意在NIO中事件分离器应该是我们自己写的判断事件类型的代码,而`Selector`只是做了一个轮询返回的工作)**
 
@@ -12,7 +12,7 @@
 
 ### Proactor（图从右往左看）
 
-<img src="E:\Typora\resources\Java\IO\Proactor.png" style="zoom:67%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Proactor.png" style="zoom:67%;" />
 
 读操作为例
 

@@ -300,6 +300,8 @@ public ThreadPoolExecutor(int corePoolSize,//线程池中的线程数量
 ```
 
 * corePoolSize:线程池中的线程数量
+  * **CPU密集型：corePoolSize = CPU核数 + 1**
+  * **IO密集型：corePoolSize = CPU核数 \* 2**
 * maximumPoolSize:线程池中的最大线程数量
 * keepAliveTime:线程池线程超过corePoolSize时,多余的空闲线程存活时间**(只对于创建newCachedThreadPool()时有用,因为其他两个工厂方法线程数量不会超过corePoolSize)**
 * unit:keepAliveTime的单位

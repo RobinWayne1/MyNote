@@ -11,7 +11,7 @@
 
 ### 2.内存
 
-![](E:\Typora\resources\MySQL\InnoDB内存结构.png)
+![](E:\Typora\MyNote\resources\MySQL\InnoDB内存结构.png)
 
 #### (一)缓冲池
 
@@ -103,7 +103,7 @@ Insert Buffer用一棵全局B+树存储非聚集索引,其非叶子节点存储�
 
 问题:当数据库发生宕机时,可能InnoDB存储引擎正在写入某个页到表中,而这个页只写了一部分,比如16kb的页只写了前4kb,这称为部分写失效。==因为脏页刷新到磁盘的写入单元小于单个页的大小，如果在写入过程中数据库突然宕机，可能会使数据页的写入不完整，造成数据页的损坏。而redo log中记录的是对页的**物理操作,即重做日志文件记录的是每个页的更改的物理情况(如记录偏移量800写"aaa"记录),如果数据页内部发生损坏了(MySQL在恢复的过程中检查page的checksum，checksum就是检查page的最后事务号，发生partial page write问题时，page已经损坏，找不到该page中的事务号。在InnoDB看来，这样的数据页是无法通过checksum验证的，就无法恢复。)，通过redo log也无法进行恢复。**==所以这种情况发生时,先通过页的副本还原该页(变为损坏之前),然后再进行重做。
 
-![](E:\Typora\resources\MySQL\两次写流程.jpg)
+![](E:\Typora\MyNote\resources\MySQL\两次写流程.jpg)
 
 解决方案：当一系列机制（Master Thread触发、checkpoint等）触发数据缓冲池中的脏页进行刷新到数据文件的时候，并不直接写磁盘，而是会通过memcpy函数将脏页**①先复制到内存中的double write buffer**，之后**②通过double write buffer再分两次、每次1MB顺序写入共享表空间的物理磁盘上**。**③然后马上调用fsync函数，同步脏页进磁盘上**。
 
@@ -113,7 +113,7 @@ Insert Buffer用一棵全局B+树存储非聚集索引,其非叶子节点存储�
 
 2. 当数据文件回到一个正确的状态后,使用重做日志恢复因为宕机而在缓冲池中丢失的数据页
 
-**请注意:`Doublewrite buffer`中的数据页只是缓冲池中脏页的一部分,并不是所有脏页,所以需要使用重做日志恢复不在`Doublewrite buffer`且丢失了的脏页。double write用作恢复由于宕机致使 写入数据文件损毁 的数据页，重做日志用作恢复未写入数据文件但在内存中丢失了的数据页**
+**请注意:`Doublewrite buffer`中的数据页只是缓冲池中脏页的一部分,并不是所有脏页,所以需要使用重做日志恢复不在`Doublewrite buffer`且丢失了的脏页。==double write负责恢复由于宕机致使 写入数据文件损毁 的数据页，重做日志则负责恢复未写入数据文件但在内存中丢失了的数据页==**
 
 #### (三)自适应哈希索引
 
