@@ -859,7 +859,39 @@ if(user!=null)
 }
 ```
 
+#### Ⅱ、`Stream`
 
+`Stream`提供的API与`Optional`有些类似.
+
+##### 1、过滤集合值场景
+
+###### ①、`filter()`
+
+```java
+Stream<T> filter(Predicate<? super T> predicate);
+```
+
+遍历流并根据谓词接口过滤数据
+
+###### ②、`distinct()`
+
+```java
+Stream<T> distinct();
+```
+
+数据去重,底层调用的是`equals()`去判断
+
+##### 2、输出集合元素的部分成员
+
+###### ①、`map()`
+
+```java
+List<String> names = students.stream()
+                            .filter(student -> "计算机科学".equals(student.getMajor()))
+                            .map(Student::getName).collect(Collectors.toList());
+```
+
+`map()`的作用就是将流数据映射成某一类型的数据,上面的示例就是将`Stream<Student>`映射成了`Stream<String>`,最后调用`collect()`方法返回相应的集合对象
 
 ## 七、输入输出流
 
@@ -867,7 +899,7 @@ if(user!=null)
 
 在讲四个主要接口之前，先来了解`File`类。File类是对文件系统中文件以及文件夹进行封装的对象，可以通过对象的思想来操作文件和文件夹，其保存了文件或目录的各种元数据信息，并提供了创建、删除文件和目录的方法。
 
-### Ⅰ、InputStream
+### Ⅰ、`InputStream`
 
 `InputStream`是一个抽象类,它提供了两个最重要的抽象方法给子类实现——`read()`和`read(byte[]b)`。其中`read()`用于读取一个字节，并将读取指针向后移动一位，若已经读取完毕`read()`就会返回-1，通常将该方法放在`while`循环中;而 则会将输入流中的数据复制到byte数组b中。
 
