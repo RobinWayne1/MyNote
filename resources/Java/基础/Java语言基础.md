@@ -530,11 +530,13 @@ JAVA反射机制是在运行状态中，对于任意一个类，都能够知道�
 
 要想解剖一个类,必须先要获取到该类的字节码文件对象。而解剖使用的就是Class类中的方法.所以先要获取到每一个字节码文件对应的Class类型的对象 。反射就是把java类中的各种成分映射成一个个的Java对象。
 
-## 五、Lambda表达式
+## 五、Java8新特性
+
+### Ⅰ、Lambda表达式
 
 Lambda表达式是用来代替匿名内部类写法的，它的出现让方法中实现接口的写法变得更加易读。Lamda表达式的使用场景是：**==对于只有一个抽象方法的接口==**，需要这种接口的对象时，就可以提供一个Lambda表达式（可以将Lambda表达式看作是匿名内部类的对象创建方式，就很容易理解了）。
 
-### Ⅰ、基本使用
+#### 1、基本使用
 
 Lambda的基本写法：`()->{}`。其中括号表示接口唯一抽象方法中的参数列表，花括号内就写方法的实现。
 
@@ -564,7 +566,7 @@ Arrays.sort(a, new Comparator<String>()
 
 始终关注Lambda表达式代表接口对象就容易理解。
 
-### Ⅱ、特殊简写
+#### 2、特殊简写
 
 1. 参数列表的类型可以省略，即
 
@@ -591,7 +593,7 @@ Arrays.sort(a, new Comparator<String>()
    (o1, o2) -> o1.length() - o2.length()
    ```
 
-### Ⅲ、方法引用
+#### 3、方法引用
 
 在某些情况下，要实现的抽象方法需要调用某个现成的方法**（也就是说Lambda表达式的实现只做一个传递参数值的作用）**，这种情况就要使用方法引用。
 
@@ -613,7 +615,7 @@ Arrays.sort(a, (o1, o2) -> o1.compareToIgnoreCase(o2));
 Arrays.sort(a, String::compareToIgnoreCase);
 ```
 
-### Ⅳ、构造器引用
+#### 4、构造器引用
 
 构造器引用和方法引用有些类似，只不过格式变成了`类名::new`。
 
@@ -652,11 +654,214 @@ PersonFactory p=Person::new;
 
 还有一个要注意的问题就是构造器的选取是根据抽象方法的参数做分派的,所以上面的例子将会使用Person的`String s`构造器。
 
-### Ⅴ、变量作用域
+#### 5、变量作用域
 
 Lambda表达式中可以访问外围方法或类中的变量，但是有一个极其重要的限制，那就只表达式中只能引用值不会改变的变量，无论是表达式外修改或是表达式内修改都会出现编译错误。
 
-## 六、输入输出流
+#### 6、四大函数式接口
+
+##### ①、`Consumer`接口
+
+从字面意思上理解,消费者接口，意味着这个接口是用来消费入参给的值的。
+
+* 函数式接口定义
+
+  ```java
+  @FunctionalInterface
+  public interface Consumer<T> {
+      void accept(T t);    
+  }
+  ```
+
+  顾名思义的消费，将其想象成MQ，是没有返回值的。
+
+* 示例：
+
+  ```java
+   Stream.of("aaa", "bbb", "ddd", "ccc", "fff").forEach(s -> System.out.println(s.toUpperCase()));
+  ```
+
+  分析:`forEach`内所需的参数就是`Consumer`,此时的消费者的功能就是在遍历中输出流的大写字母
+
+##### ②、`Supplier `接口
+
+同样按字面意思理解,供给型接口,意味着这个接口作为一个容器提供数据。
+
+* 函数式接口定义
+
+  ```java
+  @FunctionalInterface
+  public interface Supplier<T> {
+      T get();
+  }
+  ```
+
+* 示例:
+
+  ```java
+  supplier = () -> new Random().nextInt();
+  System.out.println(supplier.get());
+  ```
+
+  分析:从容器中获取一个随机数
+
+##### ③、`Predicate `接口
+
+`Predicate` 接口是一个谓词型接口，其实，这个就是一个返回值为`boolean`类型的判断接口
+
+* 函数式接口定义
+
+  ```java
+  @FunctionalInterface
+  public interface Predicate<T> {
+      boolean test(T t);
+  }
+  ```
+
+* 示例:
+
+  ```java
+  predicate = (t) -> t > 5;
+  System.out.println(predicate.test(1));
+  ```
+
+  分析:判断数字是否大于5
+
+##### ④、`Function`接口
+
+这是最难理解也是最常用的接口,他的作用就是对入参进行转换,将一种类型的对象转换成另外一种类型的对象
+
+* 函数式接口定义
+
+  ```java
+  @FunctionalInterface
+  public interface Function<T, R> {
+      R apply(T t);
+  }
+  ```
+
+* 示例:
+
+  ```java
+  Function<String,Integer>func=String::length;
+  System.out.println(func.apply("123123"));
+  ```
+
+  分析:将输入的字符串转换成其长度输出
+
+### 二、`Stream`与`Optional`
+
+先来说说我对这两个类的理解。这两个类其实非常的相似，其中`Optional`类是基于对象的,而`Stream`类则是基于集合的,他们的作用都是以比较优雅的链式调用代替繁杂的`if···else···`,以`Optional`类为例子,他的功能就有以链式调用代替判空并返回默认值、设置对象成员变量的条件过滤并返回等等；而对于`Stream`类来说,他的功能就是根据条件过滤集合元素等等。
+
+#### Ⅰ、`Optional`
+
+##### 1、判空场景
+
+要使用`Optional`来避免`NullPointerException`,就要先构造`Optional`对象。
+
+有三种构造方法：
+
+```java
+Optional<User>opt1=Optional.empty();
+Optional<User> opt2 = Optional.of(user);
+Optional<User> opt3 = Optional.ofNullable(user);
+
+User user=opt1.get();
+```
+
+其中第一种方法则是相当于传入一个null,而第二种方法如果传null进去则会抛出`NullPointerException`,第三种方法则允许传null或者对象进去,所以一般是用`Optional.ofNullable()`。
+
+当然，`Optional`只是一个具有判空API的类，还需要一个将原对象获取出来的方法，那就是`get()`。然而如果`Optional`类内的`value`是null,则调用`get()`的时候依然会抛出`NullPointerException`,**那么如何才能进行判空呢?**
+
+```java
+public boolean isPresent() {
+        return value != null;
+    }
+
+ public void ifPresent(Consumer<? super T> consumer) {
+        if (value != null)
+            consumer.accept(value);
+    }
+```
+
+两种方法:第一种很简单,就是进行判空;而第二种就说得上是代替了`if···else···`的一个接口了:如果值不为空,则调用消费者接口方法以消费该消息。
+
+##### 2、返回默认值场景
+
+三种方法：
+
+```java
+public T orElse(T other) {
+        return value != null ? value : other;
+    }
+public T orElseGet(Supplier<? extends T> other) {
+        return value != null ? value : other.get();
+    }
+
+//示例：
+        User user = null;
+        User result = Optional.ofNullable(user).orElse(new User("WWY", 1));
+
+      	User result = Optional.ofNullable(user).orElseGet(()->new User("WWY", 1));
+
+		User result = Optional.ofNullable(user)
+      			.orElseThrow( () -> new IllegalArgumentException());
+```
+
+对于`orElse()`来说,其逻辑就是如果为空,则返回给定入参默认值;而对于`orElseGet()`来说,其逻辑就是如果为空,则调用供给接口获取值。而这两者最大的不同如果值为不为空，`orElse()`会创建默认对象而`orElseGet()`不会创建默认对象,也就是饿汉式和懒汉式的问题。而至于该机制的原理，很明显一个传的是`new`方法一个传的是`Supplier`对象,`new`方法肯定会在`orElse()`调用前就执行了。
+
+第三种方法就是抛出异常了
+
+##### 3、转换值
+
+```java
+public<U> Optional<U> map(Function<? super T, ? extends U> mapper) {
+    Objects.requireNonNull(mapper);
+    if (!isPresent())
+        return empty();
+    else {
+        return Optional.ofNullable(mapper.apply(value));
+    }
+}
+
+//示例
+String str=Optional.ofNullable(user).map(User::getName).orElse("null");
+//相当于
+if(user!=null)
+{
+    return user.getName()==null?"null":user.getName();
+}
+```
+
+调用时传入一个转换接口，返回的将是转换之后的值的`Optional`。
+
+##### 4、过滤值
+
+`filter() `接受一个 Predicate 参数，返回测试结果为 true 的值。如果测试结果为 false，会返回一个空的 `Optional`。
+
+```java
+Optional.ofNullable(user).filter(user1->user1.getName().equals("WWY")).ifPresent(System.out::println);
+```
+
+相当于
+
+```java
+if(user!=null)
+{
+    String name=user.getName();
+    if(name!=null)
+    {
+        if(name.equals("WWY"))
+        {
+            System.out.println(name);
+        }
+    }
+}
+```
+
+
+
+## 七、输入输出流
 
 `java.io`包下的流分为两大类：字符流（`Writer`和`Reader`）与字节流（`OutputStream`和`InputStream`）。字节流的特点是支持单个字节读取或者是读取一个字节数组（不依赖于读单个字节的本地方法`read0()`（以`FileInputStream`为例）,而字符流特点是支持单个Unicode码元的读取（以`FileReader`为例）。
 
@@ -728,7 +933,7 @@ Reader是处理字符流的一个接口，它同样提供了`read()`和`read(cha
 
 与Redaer相类似
 
-## 七、序列化
+## 八、序列化
 
 当两个Java进程要通信，或需要将一个对象存储到磁盘时，就可以使用序列化机制。序列化机制就是将对象的数据序列化写入到输出流中，并在之后将其读回就可以直接反序列化为一个对象。
 
