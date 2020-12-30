@@ -207,7 +207,7 @@ prepareStatement.execute();
 
 ### Ⅱ、 配置 JAVA 对象属性与查询结果集中列名对应关系
 
-`<resultMap>` 标签的使用
+#### ①、`<resultMap>` 标签的使用
 基本作用：
 
 - 建立 SQL 查询结果字段与实体属性的映射关系信息
@@ -242,6 +242,10 @@ prepareStatement.execute();
 
 - id:用于设置主键字段与领域模型属性的映射关系，此处主键为 ID，对应 id。
 - result：用于设置普通字段与领域模型属性的映射关系
+
+#### ②、`<resultType>`标签的使用
+
+其作用就是指定返回的类型,用这个比用`<resultMap>`来得简单,因为是自己处理映射.但是要注意一点,就算查出来多条数据,这个`<resultType>`填的都是查出来的每条数据所要转换成的类型,也就是说就算查出来很多行数据,这个标签也应该填`java.util.Map`而不是`java.util.List`。
 
 ### Ⅲ、动态 sql 拼接
 
