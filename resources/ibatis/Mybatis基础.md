@@ -277,7 +277,7 @@ foreach 标签主要用于构建 in 条件，可在 sql 中对集合进行迭代
 
 属性介绍：
 
-`collection`：collection 属性的值有三个分别是 list、array、map 三种，分别对应的参数类型为：List、数组、map 集合。
+`collection`：collection 属性的值填的是`@Param`指定的key，有三种类型分别是是 list、array、map 
 `item` ：表示在迭代过程中每一个元素的别名
 `index` ：表示在迭代过程中每次迭代到的位置（下标）
 `open` ：前缀
