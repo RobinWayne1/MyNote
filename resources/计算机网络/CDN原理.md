@@ -58,18 +58,12 @@ CDN即是内容分发网络，内容分发网络一般是用作加速访问一�
 
 材爷告诉我，边缘服务器的缓存是以整个完整的HTTP请求URL为key的，所以要每次都CDN回源，那么就要在请求参数中设置一个每次请求都会变的变量，如时间戳，才能做到实时更新。不过不同CDN提供商的缓存过期和缓存记录格式都不同，这只是唯品会使用CDN的特例，看看就好。
 
+参考资料
 
-
-## 五、CDN使用场景
-
-
-
-
-
-https://www.keycdn.com/support/how-does-a-cdn-work
-
-https://blog.csdn.net/dd_orz/article/details/100034049
-
-https://blog.csdn.net/xiangzhihong8/article/details/83147542
-
-**https://ns1.com/resources/cnamehttps://ns1.com/resources/cname**
+> https://www.keycdn.com/support/how-does-a-cdn-work
+>
+> https://blog.csdn.net/dd_orz/article/details/100034049
+>
+> https://blog.csdn.net/xiangzhihong8/article/details/83147542
+>
+> https://ns1.com/resources/cname
