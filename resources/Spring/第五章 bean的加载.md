@@ -1500,7 +1500,7 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 1. singleton为默认值，IOC容器中仅存在一个Bean实例，Bean都以**单例模式**存在 
 2. prototype，在每次调用`getBean()`获取Bean的时候，都会**创建一个新的实例**
 3. request，在每一次**http请求**时会创建一个实例，该实例仅在当前**http** **request**有效 
-4. session，在每一次**http****请求**时会创建一个实例，该实例仅在当前**http** **session**有效 
+4. session，在每一次**http**请求**时会创建一个实例，该实例仅在当前** **httpsession**有效 
 5. globalSession，全局Session，供**不同的portlet**共享，portlet好像是类似于servlet的Web组件
 
 ## 六、Spring事务
@@ -1516,6 +1516,55 @@ Spring中Bean有**五种scope**，**singleton** **prototype** **request** **sess
 ### Ⅲ、事务回滚机制（`@Transational(rollbackFor="")`）
 
 ![](E:\Typora\MyNote\resources\Spring\回滚机制.png)
+
+### Ⅳ、Spring事务使用注意事项
+
+难得工作中遇到这种原理性问题，必须要记下来。
+
+1. `@Transational`声明的方法必须要用`Public`修饰,不然的话在代理调用后获取方法调用的拦截器链时,根本就匹配不到相应的事务增强,也就是说拦截器链不会有事务增强。
+
+2. 在调用`@Transational`声明的方法时，调用方所在的类与被调用方法所在的类必须是不同的类那么`Transational`注解才生效。
+
+   背景：
+
+   ```java
+public class AccountServiceImpl{
+   	@Autowired    
+   	private DeliverBussiness deliverBussiness；
+           
+   	method(){
+       	deliverBussiness.userDeliver();
+       
+   	}
+   }
+   ```
+   
+   ```java
+   public class DeliverBussiness{
+       userDeliver(){
+           runUserDeliver();
+       }
+       
+       @Trancsational()
+       runUserDeliver(){
+           
+       }
+   }
+   ```
+   
+   调用逻辑如上图所示，在测试的时候发现`runUserDeliver()`的事务并没有生效。
+   
+   ![](E:\Typora\MyNote\resources\Spring\CGLIB代理流程.PNG)
+   
+   由于我没有看过`CglibAopProxy`,所以一开始我认为的调用逻辑是如上图所示的，也就是说，我认为Spring的CglibAop实现保留了Cglib动态代理的特性，能够在内部调用时同样触发代理==（代理子类的父类方法进行内部方法调用时将分派到代理子类中执行代理逻辑，Cglib的重要的特性）==。然而Spring为了复用`ReflectiveMethodInvocation`的递归调用逻辑（或许应该说是为了和Jdk动态代理实现的Aop保持同样的逻辑和用法）,完全抛弃了Cglib的这个重要特点，而是做成如下图所示。
+   
+   ![](E:\Typora\MyNote\resources\Spring\SpringAOPCGLIB代理流程.PNG)
+
+调用`userDeliver()`时则会调用到`DeliverBussiness`的Cglib代理子类的方法中去,而由于`userDeliver()`没有`@Trancsational`注解,所以获得的拦截器链中并没有事务增强,然后就是`invokeJoinPoint()`直接调用目标Bean的方法。**然后重点来了，这个`invokeJoinPoint()`并不是调用Cglib代理子类的`userDeliver()`，而是调用一个全新的`DeliverBussiness`Bean,这个Bean就是一个普通的SpringBean,并不是代理对象。所以，在`userDeliver()`中继续调用被事务注解声明的`runUserDeliver()`根本就不会触发代理逻辑。**
+
+最后的解决方法是将`runUserDeliver()`放到另外一个Bean中,但是离谱的是`runUserDeliver()`也有调用这个Bean的方法（同样声明`@Trancsational`）,所以又成了一次内部调用😀。当然,由于`runUserDeliver()`调用的内部方法的`@Trancsational`注解传播机制和`runUserDeliver()`的一致，**==也就是都为`required`==,所以其实代理生效不生效也都没啥问题**😀(也相当于这个注解没啥用,因为都被包裹在了`runUserDeliver()`的事务里，前提是只有`runUserDeliver()`调用)。
+
+上面说的这段莫名其妙撞对的神奇操作就不要用了，如果要调用的方法要被包事务，就将这个方法扔去别的类里吧。
 
 ## 七、依赖注入歧义性解决
 

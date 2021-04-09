@@ -88,7 +88,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
 
 #### 8.FutureTask
 
-<img src="E:\Typora\resources\Java\Java高并发\FutureTask.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\Java高并发\FutureTask.png" style="zoom:50%;" />
 
 * 基本原理：线程执行futureTask中的任务，另一个线程通过`futureTask.get()`获取任务执行的返回结果,当任务未执行完成时,`futureTask.get()`将会阻塞直到任务返回。
 
@@ -133,7 +133,7 @@ parties即是计数总数,**barrierAction就是当有parties个线程调用`Cycl
     }
 ```
 
-用户交给线程的任务是在`Callable.call()`中体现的,而FutureTask将异常提取的工作放在了`run()`方法中,并将提取到的exception赋值到成员变量outcome中(如果没有出现异常则此成员变量就是正常返回结果),当用户调用`FutureTask.get()`之后将异常返回给用户。此举将用户代码与异常捕获解耦，并使 使用线程的栈帧也能获得异常信息。
+用户交给线程的任务是在`Callable.call()`中体现的,而FutureTask将异常提取的工作放在了`run()`方法中,并将提取到的exception赋值到成员变量outcome中(如果没有出现异常则此成员变量就是正常返回结果),当用户调用`FutureTask.get()`之后则包装原异常并抛出给用户。此举将用户代码与异常捕获解耦，并使 使用线程的栈帧也能获得异常信息。
 
 #### 9.线程阻塞工具类:LockSupport
 
@@ -300,8 +300,8 @@ public ThreadPoolExecutor(int corePoolSize,//线程池中的线程数量
 ```
 
 * corePoolSize:线程池中的线程数量
-  * **CPU密集型：corePoolSize = CPU核数 + 1**
-  * **IO密集型：corePoolSize = CPU核数 \* 2**
+  * **CPU密集型：corePoolSize = CPU核数 + 1，理由：CPU密集型应用意味着CPU利用率很高，使用配置过多的线程数指挥加大线程上下文切换的开销，进而使利用率降低。而+1的原因则是因为即使当计算密集型的线程偶尔由于缺失故障或者其他原因而暂停时，这个额外的线程将能利用由于线程IO阻塞导致CPU空闲的时间，使得CPU继续运行以提高利用率**
+  * **IO密集型：corePoolSize = CPU核数 \* 2，理由：IO密集型意味着线程大部分时间在IO阻塞，若在阻塞时可以有其他线程来继续执行作业，那就能更好的利用原来CPU由于阻塞而停止运行的时间，进而提高利用率，所以是核心数两倍**
 * maximumPoolSize:线程池中的最大线程数量
 * keepAliveTime:线程池线程超过corePoolSize时,多余的空闲线程存活时间**(只对于创建newCachedThreadPool()时有用,因为其他两个工厂方法线程数量不会超过corePoolSize)**
 * unit:keepAliveTime的单位
