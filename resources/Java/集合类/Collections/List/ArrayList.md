@@ -1,5 +1,7 @@
 # ArrayList
 
+## 一、`add()`源码
+
 ```java
 //⭐默认容量,使用无参构造器创建对象时使用，起始容量是10
 private static final int DEFAULT_CAPACITY = 10;
@@ -100,3 +102,22 @@ public E remove(int index) {
     return oldValue;
 }
 ```
+
+## 二、`subList()`原理
+
+`subList(from,to)`方法将返回一个原list的子集,其中返回的list包含from下标的元素,而不包含to下标的元素。
+
+其实现原理如下：
+
+```java
+ SubList(AbstractList<E> parent,
+                int offset, int fromIndex, int toIndex) {
+            this.parent = parent;
+            this.parentOffset = fromIndex;
+            this.offset = offset + fromIndex;
+            this.size = toIndex - fromIndex;
+            this.modCount = ArrayList.this.modCount;
+        }
+```
+
+调用`subList(from,to)`将会返回这个对象,然而这个对象里存放着原来得list,也就是说其所有的`get()`,`add()`其实都是对原list对象在进行处理，只不过限制了访问的范围而已。所以通过`subList(from,to)`获取的子列表千万不要修改，因为是会影响原列表的。
