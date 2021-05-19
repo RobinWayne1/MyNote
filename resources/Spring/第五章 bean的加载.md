@@ -349,9 +349,10 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 
 循环依赖分为以下三种：
 
-1. A的构造方法中依赖了B的实例对象，同时B的构造方法中依赖了A的实例对象
+1. A的构造方法中new了B的实例对象，同时B的构造方法中new了A的实例对象
 2. A的构造方法中依赖了B的实例对象，同时B的某个field或者setter需要A的实例对象，以及反之
 3. A的某个field或者setter依赖了B的实例对象，同时B的某个field或者setter依赖了A的实例对象，以及反之
+4. （20210508新增）A的构造方法中new了B的实例对象，同时B的构造方法中new了A的实例对象
 
 第一种循环依赖是不可能解决的，这是程序的特性使然，两个`<init>`会不断的调用直到报`StackOverFlowError`错误。而Spring解决的是后面两种，因为依赖注入是Spring的特性，所以Spring就有处理这种错误的手段。
 
@@ -748,7 +749,13 @@ autowireConstructor()
     {
         //尝试从缓存中取
         argsToResolve=mbd.preparedConstructorArguments;
-       	//缓存中有则,
+       	//缓存中有则将构造器参数转换转换为最终值
+        //⭐⭐⭐⭐⭐⭐这里有一个极度重要的点，对于构造器注入的循环依赖就在这里解决
+        //简单说一下，就是要用@Lazy注解
+        // public BeanA(@Lazy BeanB beanB) {
+        //	this.beanB = beanB;
+    	//	}
+        //⭐⭐⭐⭐⭐⭐在使用这个注解后，在resolvePreparedArguments()中就会判断要依赖的BeanB是否有这个注解标注,如果有那就直接生成一个该BeanB的代理对象返回给BeanA作为注入实例，直接就在第一步就将循环依赖截断了。重点来了：此时这个BeanB本体是还没有实例化的，也就是说这个BeanB代理里面没有真实BeanB的实例。BeanB实例真正放入BeanB代理的时机是在Spring容器初始化完毕，BeanA对该BeanB方法第一次调用之时，此时BeanB代理就会从Spring容器中获取已经完全实例化好，也就是已经依赖注入好BeanA的BeanB实例给代理Bean，之后代理Bean就会走AOP代理逻辑进行方法调用了
         if(argsToResolve!=null)
             argsToUse=resolvePreparedArguments();
     }
