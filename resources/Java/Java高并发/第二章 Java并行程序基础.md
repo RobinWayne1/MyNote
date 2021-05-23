@@ -98,7 +98,7 @@ while(!条件谓词)
 
 `thread.join()`方法让当前线程阻塞直到调用方法的线程对象执行完毕.
 
-==注:`thread.join()`方法的本质是 调用`thread.wait()`方法,当`thread`线程执行完毕后退出前调用`thread.notifyAll()`通知所有等待线程继续执行.**所以不要随意调用Thread对象的`join()`,因为有可能会唤醒其他真正因为条件谓词而等待`thread`对象的线程**==
+==注:`thread.join()`方法的本质是 调用`thread.wait()`方法(`join()`方法外面是有),当`thread`线程执行完毕后退出前调用`thread.notifyAll()`通知所有等待线程继续执行.**所以不要随意调用Thread对象的`join()`,因为有可能会唤醒其他真正因为条件谓词而等待`thread`对象的线程**==
 
 #### 6、停止线程
 

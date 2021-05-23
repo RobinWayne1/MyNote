@@ -14,7 +14,7 @@ IO这一块涉及非常多操作系统知识，而我既想讲操作系统，也
 
 下面给出五种IO模型的大概解释：
 
-<img src="E:\Typora\resources\Java\IO\五种IO模型大概解释.gif" style="zoom:100%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\五种IO模型大概解释.gif" style="zoom:100%;" />
 
 **==⭐可以看到，非阻塞IO*需要用户进程不断check*；而在多路复用IO中用户进程只调用了一次check就一直阻塞，等到*网络IO完成时操作系统才会返回*==**
 
@@ -28,11 +28,11 @@ Java的NIO、AIO的主要功能其实都是依赖于操作系统内核的一些�
 
 #### 网络模型
 
-<img src="E:\Typora\resources\Java\IO\BIO网络模型.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\BIO网络模型.png" style="zoom:50%;" />
 
 #### 内核模型
 
-<img src="E:\Typora\resources\Java\IO\LinuxBIO模型.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\LinuxBIO模型.png" style="zoom:50%;" />
 
 BIO即同步阻塞IO，==由**一条线程**来监听客户端的连接建立请求,当连接建立后,服务器端需要创建一个新线程(线程池)处理客户端发送过来的数据,且客户端数据的读取或写入都必须阻塞在这个线程中==，即**⭐服务端需要在这个线程中等待数据从客户端传送到服务器端**，才能开始读操作。（连接的建立只需要调用`socket.connect()`,此时服务器就会创建新线程,而数据真正发送则需要在客户端调用`socket.write()`中，此时服务器调用的`input.readLine()`就会发生阻塞）
 
@@ -56,13 +56,13 @@ BIO即同步阻塞IO，==由**一条线程**来监听客户端的连接建立请
 
 #### 网络模型（主要记Reactor模型）
 
-![](E:\Typora\resources\Java\IO\NIO网络模型.png)
+![](E:\Typora\MyNote\resources\Java\IO\NIO网络模型.png)
 
 
 
 #### 混杂Java的内核模型
 
-<img src="E:\Typora\resources\Java\IO\NIO内核模型.jpg" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\NIO内核模型.jpg" style="zoom:50%;" />
 
 **Java NIO是多路复用IO==（并非是同步非阻塞IO）==，对于客户端的 连接建立 请求，代码逻辑(即为图中的AcceptorHandler)将会将此客户端对应的`SocketChannel`对象注册进Selector中,Selector将会将此`Socket`注册到内核中。当调用**
 
@@ -76,7 +76,7 @@ BIO即同步阻塞IO，==由**一条线程**来监听客户端的连接建立请
 
 ##### 1、Buffer
 
-<img src="E:\Typora\resources\Java\IO\Buffer类结构.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Buffer类结构.png" style="zoom:50%;" />
 
 Buffer类是读取传输数据的唯一途径,此类相当于一个数组，只不过 写和读取的方式有点复杂。
 
@@ -90,7 +90,7 @@ Buffer类是读取传输数据的唯一途径,此类相当于一个数组，只�
 
 ==`capacity`:相当于`array.length`,但这个length是用`ByteBuffer.allocate()`分配大小的==
 
-<img src="E:\Typora\resources\Java\IO\Buffer数据结构.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Buffer数据结构.png" style="zoom:50%;" />
 
 ###### ②、使用方法
 
@@ -136,7 +136,7 @@ public Selector wakeup()
 
 所有的NIO操作始于Channel，代码逻辑通过往Channel写数据和读数据以完成数据在网络上传输的功能。它与前面介绍的 Buffer 打交道，读操作的时候将 Channel 中的数据填充到 Buffer 中，而写操作时将 Buffer 中的数据写入到 Channel 中。
 
-<img src="E:\Typora\resources\Java\IO\Channel类结构.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Channel类结构.png" style="zoom:50%;" />
 
 主要看基于TCP的`ServerSocketChannel`和`SocketChannel`.
 
@@ -354,7 +354,7 @@ public class NIOClient
 
 #### 混杂Java的内核模型（主要记Proactor模型）
 
-![](E:\Typora\resources\Java\IO\AIO流程.jpg)
+![](E:\Typora\MyNote\resources\Java\IO\AIO流程.jpg)
 
 AIO即**异步非阻塞IO**，服务器端只需要将要监听的`AsynchronousServerSocketChannel`和`CompletionHanlder`注册进AIO框架，==其中`server.accept()`方法会向操作系统操作系统做`io_read`系统调用。==当有客户端将数据传送到该Channel时,操作系统内核就会将这些数据复制到用户空间,然后**通知**Java进程。**(这个通知的含义貌似是将 通知 这个任务放进`AsynchronousChannelGroups`配置的线程池中,然后通知任务内部又会将 `CompletionHandler.complete()`方法的调用 作为一个任务放入线程池。这里我讲不清楚通知是怎么被放到线程池中的，因为这源码写出来就tm没打算过给人看)**AIO框架就会将 回调逻辑的执行 作为任务提交给`AsynchronousChannelGroups`配置的线程池执行。
 
@@ -461,13 +461,13 @@ class Attachment {
 #### ==Ⅱ、AIO和NIO的区别==
 
 * ①AIO回调基于通知，回调是AIO框架内部自动调用(==**注意是通过Linux信号来进行的!!**==)；而NIO的数据处理逻辑 则需要用户代码手动调用
-* <img src="E:\Typora\resources\Java\IO\LinuxNIO.png" style="zoom:33%;" /><img src="E:\Typora\resources\Java\IO\LinuxAIO.png" style="zoom:33%;" />②**NIO中,只要网络IO完成,内核就通知Java进程数据可读，`selector.select()`此时也就不再阻塞。当用户要读取数据时(`socketChannel.read(buffer)`)，NIO框架内部阻塞进行系统调用使得数据从内核空间复制到用户空间，并将数据读入`ByteBuffer`供用户代码使用。而在AIO中，网络IO完成后，==*内核还负责将数据从内核空间复制到了用户空间，这一步完成之后内核再通知Java进程数据可读,这就使得AIO比NIO少了一次系统调用阻塞.上面两个LinuxIO模型就很清楚的说明了这个区别*==**
+* <img src="E:\Typora\MyNote\resources\Java\IO\LinuxNIO.png" style="zoom:33%;" /><img src="E:\Typora\MyNote\resources\Java\IO\LinuxAIO.png" style="zoom:33%;" />②**NIO中,只要网络IO完成,内核就通知Java进程数据可读，`selector.select()`此时也就不再阻塞。当用户要读取数据时(`socketChannel.read(buffer)`)，NIO框架内部阻塞进行系统调用使得数据从内核空间复制到用户空间，并将数据读入`ByteBuffer`供用户代码使用。而在AIO中，网络IO完成后，==*内核还负责将数据从内核空间复制到了用户空间，这一步完成之后内核再通知Java进程数据可读,这就使得AIO比NIO少了一次系统调用阻塞.上面两个LinuxIO模型就很清楚的说明了这个区别*==**
 
 ### 四、非阻塞IO（无法定义同步还是异步，因为它两不像）
 
 **一定要分清楚同步非阻塞IO并不是多路复用IO！！**
 
-<img src="E:\Typora\resources\Java\IO\同步非阻塞IO.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\同步非阻塞IO.png" style="zoom:50%;" />
 
 用户进程不断询问内核是否有数据已准备好，但是在询问与询问之间可以执行其他代码
 
@@ -475,7 +475,7 @@ class Attachment {
 
 原理比较简单，**这几种的内核模型主要有两个阶段：网络IO和本地内核进程与用户进程的IO**，分清楚了这个两个阶段就很好记了。信号驱动式IO阻塞的原因是：读取数据时会产生系统调用，使得数据从内核拷贝到用户空间，这个时间段会产生阻塞。
 
-<img src="E:\Typora\resources\Java\IO\Linux异步阻塞IO.png" style="zoom:50%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Linux异步阻塞IO.png" style="zoom:50%;" />
 
 知识点:五种LinuxIO模型,五种模型之间的区别,Java AIO、Java NIO的用法流程，还有Reactor（多路复用IO）和Procator（异步IO）的抽象流程，名词解释
 

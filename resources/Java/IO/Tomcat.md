@@ -2,7 +2,7 @@
 
 ## 一、Tomcat架构
 
-<img src="E:\Typora\resources\Java\IO\connector架构.png" style="zoom:67%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\connector架构.png" style="zoom:67%;" />
 
 ## 二、源码分析
 
@@ -103,11 +103,11 @@ public Server getServer() {
 
 在讲解`server.start()`之前,我先来讲解一下Tomcat是怎样管理各组件间的生命周期的
 
-<img src="E:\Typora\resources\Java\IO\Tomcat架构.png" style="zoom:80%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Tomcat架构.png" style="zoom:80%;" />
 
 如此庞大的一个架构,如何优雅的管理这么多组件的生命周期是一个难题。所以Tomcat使用了一个`Lifeycle`接口用于管理所有组件的生命周期。
 
-<img src="E:\Typora\resources\Java\IO\Lifecycle.png" style="zoom:67%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Lifecycle.png" style="zoom:67%;" />
 
 ```java
 //LifeCycle.java
@@ -202,7 +202,7 @@ public final synchronized void init() throws LifecycleException {
 
 所以具体的启动流程如下
 
-<img src="E:\Typora\resources\Java\IO\Tomcat启动流程.png" style="zoom:150%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Tomcat启动流程.png" style="zoom:150%;" />
 
 ### Ⅲ、`EndPoint`
 
@@ -333,11 +333,11 @@ public final void start() throws Exception {
 
 `Acceptor`类其实就相当于`Reactor`模型里的连接建立处理器,如下
 
-<img src="E:\Typora\resources\Java\IO\NIO网络模型.png" style="zoom:60%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\NIO网络模型.png" style="zoom:60%;" />
 
 但是由于Tomcat的`ServerSocketChannel`设置成了阻塞模式,这不同于我们的DEMO,因为Tomcat的`ServerSocketChannel`并没有(也不能,因为`Selector`不支持阻塞模式的channel)加入进`Selector`中,所以现在相当于`Acceptor Handler`与`Client`是直连着的。
 
-<img src="E:\Typora\resources\Java\IO\Tomcat的NIO模型.png" style="zoom:67%;" />
+<img src="E:\Typora\MyNote\resources\Java\IO\Tomcat的NIO模型.png" style="zoom:67%;" />
 
 只要弄清楚了这个架构，其实Tomcat的NIO还是非常简单的。
 

@@ -10,7 +10,6 @@
 | -XX:MaxPermGen              | 设置永久代的最大值                                           |
 | -XX:SurvivorRatio           | 设置Eden区和Survivor区的空间比例：Eden/S0 = Eden/S1 默认为8  |
 | -XX:NewRatio                | 设置年老代和年轻代的比例大小，默认值为2                      |
-| -XX:SurvivorRatio           | 调整Eden区和Survivor的比值，默认8：1                         |
 | ⭐-XX:PretenureSizeThreshold | 设置大对象进入老年代的对象占用阈值。注意tenure是维持的意思。 |
 | ⭐-XX:MaxTenuringThreshold   | 晋升到老年代的对象年龄,默认15                                |
 | -XX:HandlerPromotionFailure | 是否允许分配担保失败                                         |

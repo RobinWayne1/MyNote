@@ -10,6 +10,8 @@
 
 拦截器链顺序看最下面。
 
+==**如果要修改返回值，只能用`AroundAdvice`了;其次如果要改调用参数也是用环绕增强，具体看他的`proceed()`,连参数都能传进去。至于原因的话，只需要看看这些增强的实现的`MethodInterceptor.invoke()`就知道了,如`AspectJAfterThrowingAdvice`,`AspectJAfterReturningAdvice`,`AspectJAfterAdvice`和`AspectJAroundAdvice`的区别,就是这些`invoke()`实现都没有返回`invokeAdviceMethod()`,除了环绕增强。**==
+
 ### 二、源码解析
 
 如果配置文件有
