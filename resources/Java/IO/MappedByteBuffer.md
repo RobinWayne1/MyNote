@@ -18,7 +18,7 @@ public class MappedByteBufferTest {
             arr[i] = mappedByteBuffer.get();
         }
         System.out.println(Arrays.toString(arr));
-        //修改共享库内存映射区域的数据，将会定时刷盘
+        //修改共享库内存映射区域的数据
         mappedByteBuffer.putChar(14,'艹');
     }
 }
@@ -66,7 +66,7 @@ linux进程**==虚拟内存（注意是虚拟不是物理,再进一步说这里�
 
 Linux读写文件都要经过PageCache，所以这就是mmap要设计成用户空间虚拟内存映射PageCache的用意。而通过mmap映射的文件在被修改的时候就要从映射区域刷回磁盘，这个同步操作有4个时机：
 
-* 调用专供mmap使用的同步函数`msync`,类似`fsync`阻塞直到刷盘成功
+* 调用专供mmap使用的同步函数`msync`,类似`fsync`阻塞直到buffer刷盘成功
 * 用 `munmap` 函数对文件进行解除映射关系时
 * 进程退出时
 * 系统关机时
