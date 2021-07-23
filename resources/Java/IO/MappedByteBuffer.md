@@ -79,6 +79,13 @@ Linux读写文件都要经过PageCache，所以这就是mmap要设计成用户�
 
 <img src="E:\Typora\MyNote\resources\Java\IO\Linux内核空间与JVM的关系.jpg" style="zoom:50%;" />
 
+描述：
+
+* 其中进程代码区和数据区存放的是JVM代码和数据而不是Java程序的代码和数据
+* 这个模型的并不是JVM内存使用的精确模型，而是侧重于操作系统的角度来阐述JVM，所以有些地方会看的很懵就比如这个栈区。虚拟机栈毫无疑问是放在Linux进程堆区的，然而这里又写JVM线程栈对应Linux进程栈区。这里涉及到一个知识点：Linux进程栈区运行的其实是运行JVM的本地C代码与Java程序的一些JNI调用，也有可能运行被JIT编译之后的代码。所以不要将运行时数据区的虚拟机栈和这里的线程栈对应起来，不是同一个东西。
+
+三者区别：
+
 * `HeapByteBuffer`:读取数据时从页缓冲拷贝到Linux运行时堆(Java堆外),然后再将数据拷贝到Java堆内。使用`ByteBuffer.allocate()`获得
 * `DirectByteBuffer`:读取数据时从页缓冲拷贝到Linux运行时堆(Java堆外),然后在Java堆内new一个`DirectByteBuffer`对象直接引用堆外数据。使用`ByteBuffer.allocateDirect()`获得
 * `MappedByteBuffer`:在Linux进程虚拟内存中的未使用部分分配一块区域映射页缓冲,在真正访问文件数据时产生缺页异常以进行数据读取。使用`FileChannel.map()`获取。
